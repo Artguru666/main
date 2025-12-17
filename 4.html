@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Noir Sketch Scene</title>
+    <style>
+        body { 
+            margin: 0; 
+            background: #fafafa;
+            overflow: hidden;
+        }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FontLoader.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/geometries/TextGeometry.js"></script>
+    <script>
+        let scene, camera, renderer, controls, clock;
+        let holographicObject, spawnedObjects = [];
+
+        // Toon/Ink shader for stark black and white effect
+        const toonShader = {
+            vertexShader: `
+                varying vec3 vNormal;
+                varying vec3 vViewPosition;
+                
+                void main() {
+                    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+                    vViewPosition = -mvPosition.xyz;
+                    vNormal = normalMatrix * normal;
+                    gl_Position = projectionMatrix * mvPosition;
+                }
+            `,
+            fragmentShader: `
+                varying vec3 vNormal;
+                varying vec3 vViewPosition;
+                uniform vec3 baseColor;
+                
+                void main() {
+                    vec3 normal = normalize(vNormal);
+                    vec3 viewDir = normalize(vViewPosition);
+                    
+                    // Calculate lighting
+                    vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
+                    float NdotL = dot(normal, lightDir);
+                    
+                    // Toon shading with 2 levels
+                    float toon = NdotL > 0.0 ? 0.9 : 0.3;
+                    
+                    // Edge detection for outlines
+                    float edge = abs(dot(viewDir, normal));
+                    edge = edge < 0.3 ? 0.0 : 1.0;
+                    
+                    vec3 color = baseColor * toon * edge;
+                    gl_FragColor = vec4(color, 1.0);
+                }
+            `
+        };
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xffffff);
+            scene.fog = new THREE.Fog(0xffffff, 10, 20);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+            camera.position.set(-8, 5, 10);
+            camera.lookAt(0, 1, 0);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.body.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.target.set(0, 1, 0);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+
+            clock = new THREE.Clock();
+
+            createScene();
+            
+            // Add edge/outline rendering
+            addOutlineEffect();
+            
+            animate();
+                        // --- Animated floating text spawn ---
+                        const floatingTexts = [
+                            { text: 'ART NOMAD', color: '#ff0080', size: 2.2 },
+                            { text: 'art', color: '#7928ca', size: 1.2 },
+                            { text: 'travel', color: '#00bfff', size: 1.2 },
+                            { text: 'surf', color: '#00ffb8', size: 1.2 },
+                            { text: 'poetry', color: '#ffaa00', size: 1.2 }
+                        ];
+                        let textMeshes = [];
+                        function spawnFloatingText() {
+                            if (!window.THREE || !THREE.FontLoader) return setTimeout(spawnFloatingText, 300);
+                            const loader = new THREE.FontLoader();
+                            loader.load('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/fonts/helvetiker_regular.typeface.json', function(font) {
+                                floatingTexts.forEach((item, idx) => {
+                                    setTimeout(() => {
+                                        const geo = new THREE.TextGeometry(item.text, {
+                                            font: font,
+                                            size: item.size,
+                                            height: 0.2,
+                                            curveSegments: 8,
+                                            bevelEnabled: true,
+                                            bevelThickness: 0.05,
+                                            bevelSize: 0.03,
+                                            bevelSegments: 2
+                                        });
+                                        const mat = new THREE.MeshBasicMaterial({ color: item.color });
+                                        const mesh = new THREE.Mesh(geo, mat);
+                                        mesh.position.set(-5 + idx * 2.5, 7 - idx * 1.5, 0);
+                                        mesh.rotation.y = Math.random() * Math.PI * 2;
+                                        mesh.userData.floatSpeed = 0.3 + Math.random() * 0.2;
+                                        scene.add(mesh);
+                                        textMeshes.push(mesh);
+                                    }, idx * 800);
+                                });
+                            });
+                        }
+
+                        // Animate floating text
+                        function animateFloatingText(time) {
+                            if (!textMeshes.length) return;
+                            textMeshes.forEach((mesh, i) => {
+                                mesh.position.y += Math.sin(time * 0.7 + i) * 0.01;
+                                mesh.rotation.y += 0.01 * (i % 2 === 0 ? 1 : -1);
+                                mesh.rotation.x += 0.005 * (i % 2 === 1 ? 1 : -1);
+                            });
+                        }
+
+                                // Call spawn after scene is ready
+                                setTimeout(spawnFloatingText, 1200);
+
+                                // Add retro space continue button after all texts spawn
+                                function showContinueButton() {
+                                    if (document.getElementById('continueBtn')) return;
+                                    const btn = document.createElement('button');
+                                    btn.id = 'continueBtn';
+                                    btn.innerText = 'CONTINUE';
+                                    btn.style.position = 'fixed';
+                                    btn.style.left = '50%';
+                                    btn.style.top = '85%';
+                                    btn.style.transform = 'translateX(-50%)';
+                                    btn.style.zIndex = '1000';
+                                    btn.style.fontFamily = 'monospace, Courier, "Lucida Console", monospace';
+                                    btn.style.fontSize = '2em';
+                                    btn.style.letterSpacing = '0.2em';
+                                    btn.style.padding = '0.7em 2.5em';
+                                    btn.style.background = 'radial-gradient(circle at 60% 40%, #00f0ff 0%, #1a0033 100%)';
+                                    btn.style.color = '#fff';
+                                    btn.style.border = '3px solid #00f0ff';
+                                    btn.style.borderRadius = '18px';
+                                    btn.style.boxShadow = '0 0 24px #00f0ff, 0 0 8px #fff inset';
+                                    btn.style.textShadow = '0 0 8px #00f0ff, 0 0 2px #fff';
+                                    btn.style.cursor = 'pointer';
+                                    btn.style.transition = 'background 0.2s, box-shadow 0.2s, color 0.2s';
+                                    btn.onmouseover = function() {
+                                        btn.style.background = 'radial-gradient(circle at 40% 60%, #fff 0%, #00f0ff 100%)';
+                                        btn.style.color = '#00f0ff';
+                                        btn.style.boxShadow = '0 0 40px #fff, 0 0 16px #00f0ff inset';
+                                    };
+                                    btn.onmouseout = function() {
+                                        btn.style.background = 'radial-gradient(circle at 60% 40%, #00f0ff 0%, #1a0033 100%)';
+                                        btn.style.color = '#fff';
+                                        btn.style.boxShadow = '0 0 24px #00f0ff, 0 0 8px #fff inset';
+                                    };
+                                    btn.onclick = function() {
+                                        window.location.href = 'artnomad-viewer.html';
+                                    };
+                                    document.body.appendChild(btn);
+                                }
+
+                                // Show button after all texts have spawned
+                                setTimeout(showContinueButton, 1200 + floatingTexts.length * 800 + 400);
+        }
+
+        function addOutlineEffect() {
+            // Add directional light for better shading
+            const light = new THREE.DirectionalLight(0xffffff, 1);
+            light.position.set(5, 10, 7);
+            light.castShadow = true;
+            scene.add(light);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+        }
+
+        function addSketchyLines(mesh, density = 10) {
+            const points = [];
+            const position = mesh.geometry.attributes.position;
+            
+            // Add random sketchy lines on surfaces
+            for (let i = 0; i < density; i++) {
+                const t = Math.random();
+                const idx1 = Math.floor(Math.random() * (position.count - 1));
+                const idx2 = idx1 + 1;
+                
+                const p1 = new THREE.Vector3(
+                    position.getX(idx1) + (Math.random() - 0.5) * 0.1,
+                    position.getY(idx1) + (Math.random() - 0.5) * 0.1,
+                    position.getZ(idx1) + (Math.random() - 0.5) * 0.1
+                );
+                const p2 = new THREE.Vector3(
+                    position.getX(idx2) + (Math.random() - 0.5) * 0.1,
+                    position.getY(idx2) + (Math.random() - 0.5) * 0.1,
+                    position.getZ(idx2) + (Math.random() - 0.5) * 0.1
+                );
+                
+                points.push(p1, p2);
+            }
+            
+            if (points.length > 0) {
+                const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
+                const lineMat = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1 });
+                const lines = new THREE.LineSegments(lineGeo, lineMat);
+                return lines;
+            }
+            return null;
+        }
+
+        function createHouse(x, y, z, width = 2.5, height = 3, depth = 2.5) {
+            const group = new THREE.Group();
+            
+            // House body - dark material
+            const bodyGeo = new THREE.BoxGeometry(width, height, depth);
+            const bodyMat = new THREE.MeshToonMaterial({ 
+                color: 0x1a1a1a,
+                emissive: 0x000000
+            });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = height / 2;
+            body.castShadow = true;
+            body.receiveShadow = true;
+            
+            // Add edges
+            const bodyEdges = new THREE.EdgesGeometry(bodyGeo);
+            const bodyLine = new THREE.LineSegments(bodyEdges, new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 }));
+            bodyLine.position.y = height / 2;
+            
+            // Add sketchy lines to body
+            const bodySketchy = addSketchyLines(body, 20);
+            if (bodySketchy) {
+                bodySketchy.position.y = height / 2;
+                group.add(bodySketchy);
+            }
+            
+            // Roof - pyramid style
+            const roofGeo = new THREE.ConeGeometry(width * 0.8, 2, 4);
+            const roofMat = new THREE.MeshToonMaterial({ color: 0x0a0a0a });
+            const roof = new THREE.Mesh(roofGeo, roofMat);
+            roof.position.y = height + 1;
+            roof.rotation.y = Math.PI / 4;
+            roof.castShadow = true;
+            
+            const roofEdges = new THREE.EdgesGeometry(roofGeo);
+            const roofLine = new THREE.LineSegments(roofEdges, new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 }));
+            roofLine.position.y = height + 1;
+            roofLine.rotation.y = Math.PI / 4;
+            
+            // Add sketchy lines to roof
+            const roofSketchy = addSketchyLines(roof, 15);
+            if (roofSketchy) {
+                roofSketchy.position.y = height + 1;
+                roofSketchy.rotation.y = Math.PI / 4;
+                group.add(roofSketchy);
+            }
+            
+            group.add(body, bodyLine, roof, roofLine);
+            group.position.set(x, y, z);
+            
+            return group;
+        }
+
+        function createCar() {
+            const group = new THREE.Group();
+            const carMat = new THREE.MeshToonMaterial({ color: 0x0a0a0a });
+            
+            // Main body - long and low
+            const bodyGeo = new THREE.BoxGeometry(5, 1.2, 2.2);
+            const body = new THREE.Mesh(bodyGeo, carMat);
+            body.position.y = 0.8;
+            body.castShadow = true;
+            
+            const bodyEdges = new THREE.EdgesGeometry(bodyGeo);
+            const bodyLine = new THREE.LineSegments(bodyEdges, new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 3 }));
+            bodyLine.position.y = 0.8;
+            
+            // Add sketchy lines to car body
+            const bodySketchy = addSketchyLines(body, 30);
+            if (bodySketchy) {
+                bodySketchy.position.y = 0.8;
+                group.add(bodySketchy);
+            }
+            
+            // Cabin/roof - offset back
+            const cabinGeo = new THREE.BoxGeometry(2.2, 1.4, 2);
+            const cabin = new THREE.Mesh(cabinGeo, carMat);
+            cabin.position.set(-1, 2, 0);
+            cabin.castShadow = true;
+            
+            const cabinEdges = new THREE.EdgesGeometry(cabinGeo);
+            const cabinLine = new THREE.LineSegments(cabinEdges, new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 3 }));
+            cabinLine.position.set(-1, 2, 0);
+            
+            // Add sketchy lines to cabin
+            const cabinSketchy = addSketchyLines(cabin, 20);
+            if (cabinSketchy) {
+                cabinSketchy.position.set(-1, 2, 0);
+                group.add(cabinSketchy);
+            }
+            
+            // Wheels
+            const wheelGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.4, 16);
+            const wheelMat = new THREE.MeshToonMaterial({ color: 0x000000 });
+            
+            const wheelPositions = [
+                [-1.6, 0.5, 1.2],
+                [-1.6, 0.5, -1.2],
+                [1.8, 0.5, 1.2],
+                [1.8, 0.5, -1.2]
+            ];
+            
+            wheelPositions.forEach(pos => {
+                const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+                wheel.position.set(pos[0], pos[1], pos[2]);
+                wheel.rotation.z = Math.PI / 2;
+                wheel.castShadow = true;
+                
+                const wheelEdges = new THREE.EdgesGeometry(wheelGeo);
+                const wheelLine = new THREE.LineSegments(wheelEdges, new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 }));
+                wheelLine.position.set(pos[0], pos[1], pos[2]);
+                wheelLine.rotation.z = Math.PI / 2;
+                
+                group.add(wheel, wheelLine);
+            });
+            
+            group.add(body, bodyLine, cabin, cabinLine);
+            return group;
+        }
+
+        function createScene() {
+            // Ground plane
+            const groundGeo = new THREE.PlaneGeometry(40, 40);
+            const groundMat = new THREE.MeshToonMaterial({ 
+                color: 0xf0f0f0,
+                side: THREE.DoubleSide
+            });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.position.y = -0.1;
+            ground.receiveShadow = true;
+            scene.add(ground);
+            
+            // Create fourth dimensional holographic object
+            createHolographicObject();
+            
+            // Add crosshatching to ground
+            const crosshatchMat = new THREE.LineBasicMaterial({ color: 0x333333, opacity: 0.6, transparent: true });
+            
+            // Horizontal lines
+            for (let i = -20; i <= 20; i += 0.5) {
+                const points = [];
+                points.push(new THREE.Vector3(-20, 0.01, i));
+                points.push(new THREE.Vector3(20, 0.01, i));
+                const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
+                const line = new THREE.Line(lineGeo, crosshatchMat);
+                scene.add(line);
+            }
+            
+            // Diagonal lines (left to right)
+            for (let i = -40; i <= 40; i += 1) {
+                const points = [];
+                points.push(new THREE.Vector3(i, 0.02, -20));
+                points.push(new THREE.Vector3(i + 20, 0.02, 0));
+                points.push(new THREE.Vector3(i + 40, 0.02, 20));
+                const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
+                const line = new THREE.Line(lineGeo, crosshatchMat);
+                scene.add(line);
+            }
+            
+            // Diagonal lines (right to left)
+            for (let i = -40; i <= 40; i += 1) {
+                const points = [];
+                points.push(new THREE.Vector3(i, 0.03, -20));
+                points.push(new THREE.Vector3(i - 20, 0.03, 0));
+                points.push(new THREE.Vector3(i - 40, 0.03, 20));
+                const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
+                const line = new THREE.Line(lineGeo, crosshatchMat);
+                scene.add(line);
+            }
+        }
+
+        function createHolographicObject() {
+            // Create morphing 4D tesseract-like structure
+            const geometry = new THREE.IcosahedronGeometry(2, 1);
+            const material = new THREE.MeshStandardMaterial({
+                color: 0x00ffff,
+                emissive: 0x00ffff,
+                emissiveIntensity: 0.5,
+                wireframe: true,
+                transparent: true,
+                opacity: 0.7
+            });
+            
+            holographicObject = new THREE.Mesh(geometry, material);
+            holographicObject.position.set(0, 3, 0);
+            scene.add(holographicObject);
+            
+            // Add inner rotating core
+            const coreGeo = new THREE.OctahedronGeometry(1, 0);
+            const coreMat = new THREE.MeshStandardMaterial({
+                color: 0xff00ff,
+                emissive: 0xff00ff,
+                emissiveIntensity: 0.8,
+                wireframe: true,
+                transparent: true,
+                opacity: 0.5
+            });
+            
+            const core = new THREE.Mesh(coreGeo, coreMat);
+            holographicObject.add(core);
+            holographicObject.userData.core = core;
+            
+            // Add orbiting points
+            const points = [];
+            for (let i = 0; i < 20; i++) {
+                const pointGeo = new THREE.SphereGeometry(0.1, 8, 8);
+                const pointMat = new THREE.MeshBasicMaterial({
+                    color: Math.random() * 0xffffff,
+                    emissive: Math.random() * 0xffffff,
+                    emissiveIntensity: 1
+                });
+                const point = new THREE.Mesh(pointGeo, pointMat);
+                const angle = (i / 20) * Math.PI * 2;
+                point.position.set(Math.cos(angle) * 2.5, Math.sin(angle) * 2.5, Math.sin(angle * 2) * 2.5);
+                holographicObject.add(point);
+                points.push(point);
+            }
+            holographicObject.userData.points = points;
+        }
+
+        function spawnObject() {
+            if (spawnedObjects.length > 30) return; // Limit spawned objects
+            
+            const types = ['box', 'sphere', 'tetra', 'torus'];
+            const type = types[Math.floor(Math.random() * types.length)];
+            
+            let geometry;
+            switch(type) {
+                case 'box':
+                    geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+                    break;
+                case 'sphere':
+                    geometry = new THREE.SphereGeometry(0.3, 8, 8);
+                    break;
+                case 'tetra':
+                    geometry = new THREE.TetrahedronGeometry(0.4);
+                    break;
+                case 'torus':
+                    geometry = new THREE.TorusGeometry(0.3, 0.1, 8, 12);
+                    break;
+            }
+            
+            const material = new THREE.MeshToonMaterial({
+                color: Math.random() * 0xffffff,
+                transparent: true,
+                opacity: 0.8
+            });
+            
+            const mesh = new THREE.Mesh(geometry, material);
+            
+            // Spawn from holographic object position
+            mesh.position.copy(holographicObject.position);
+            
+            // Random velocity
+            mesh.userData.velocity = new THREE.Vector3(
+                (Math.random() - 0.5) * 0.1,
+                (Math.random() - 0.5) * 0.1,
+                (Math.random() - 0.5) * 0.1
+            );
+            
+            mesh.userData.rotation = new THREE.Vector3(
+                Math.random() * 0.1,
+                Math.random() * 0.1,
+                Math.random() * 0.1
+            );
+            
+            mesh.userData.life = 0;
+            mesh.castShadow = true;
+            
+            // Add edges for toon style
+            const edges = new THREE.EdgesGeometry(geometry);
+            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x000000 }));
+            mesh.add(line);
+            
+            scene.add(mesh);
+            spawnedObjects.push(mesh);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            const time = clock.getElapsedTime();
+            const delta = clock.getDelta();
+            
+            if (holographicObject) {
+                // Morph the holographic object
+                holographicObject.rotation.x = time * 0.5;
+                holographicObject.rotation.y = time * 0.7;
+                holographicObject.rotation.z = time * 0.3;
+                
+                // Morph scale in 4D-like way
+                const scale = 1 + Math.sin(time * 2) * 0.3;
+                holographicObject.scale.set(scale, scale * 1.2, scale);
+                
+                // Rotate inner core
+                if (holographicObject.userData.core) {
+                    holographicObject.userData.core.rotation.x = -time * 2;
+                    holographicObject.userData.core.rotation.y = -time * 1.5;
+                }
+                
+                // Animate orbiting points
+                if (holographicObject.userData.points) {
+                    holographicObject.userData.points.forEach((point, i) => {
+                        const angle = time + (i / 20) * Math.PI * 2;
+                        const radius = 2.5 + Math.sin(time * 2 + i) * 0.5;
+                        point.position.x = Math.cos(angle) * radius;
+                        point.position.y = Math.sin(angle * 1.5) * radius;
+                        point.position.z = Math.sin(angle * 2) * radius;
+                    });
+                }
+                
+                // Spawn objects periodically
+                if (Math.random() < 0.1) {
+                    spawnObject();
+                }
+            }
+            
+            // Update spawned objects
+            for (let i = spawnedObjects.length - 1; i >= 0; i--) {
+                const obj = spawnedObjects[i];
+                obj.userData.life += delta;
+                
+                // Move object
+                obj.position.add(obj.userData.velocity);
+                
+                // Rotate object
+                obj.rotation.x += obj.userData.rotation.x;
+                obj.rotation.y += obj.userData.rotation.y;
+                obj.rotation.z += obj.userData.rotation.z;
+                
+                // Fade out over time
+                obj.material.opacity = Math.max(0, 0.8 - obj.userData.life * 0.1);
+                
+                // Remove old objects
+                if (obj.userData.life > 8 || obj.position.length() > 20) {
+                    scene.remove(obj);
+                    spawnedObjects.splice(i, 1);
+                }
+            }
+            
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        window.addEventListener('resize', onWindowResize, false);
+        init();
+    </script>
+</body>
+</html>

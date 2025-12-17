@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ART NOMAD</title>
+  <style>
+    body {
+      background: #001100;
+      color: #ccffcc;
+      font-family: monospace;
+      white-space: pre;
+      font-size: 14px;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+
+    #startScreen, #horseRun {
+      position: absolute;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      text-align: center;
+    }
+
+    #startScreen {
+      background: #002200;
+      gap: 20px;
+    }
+
+    .title {
+      background: linear-gradient(90deg, #004400, #ccffcc, #004400);
+      background-size: 200% auto;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      animation: shine 3s linear infinite;
+    }
+
+    @keyframes shine {
+      0% { background-position: 200% center; }
+      100% { background-position: -200% center; }
+    }
+
+    button {
+      font-size: 20px;
+      padding: 10px 20px;
+      background: #003300;
+      color: #ccffcc;
+      border: 2px solid #ccffcc;
+      cursor: pointer;
+    }
+
+    #horseRun {
+      display: none;
+    }
+
+    .horse, .ghost {
+      position: absolute;
+      top: 40%;
+      font-size: 14px;
+      white-space: pre;
+    }
+
+    .ghost {
+      opacity: 0.2;
+    }
+
+    #dustStorm {
+      position: absolute;
+      width: 100vw;
+      height: 100vh;
+      top: 0;
+      left: 0;
+      color: #ccffcc;
+      font-family: monospace;
+      font-size: 14px;
+      white-space: pre;
+      pointer-events: none;
+      z-index: 10;
+    }
+  </style>
+</head>
+<body>
+
+<div id="startScreen">
+  <pre class="title">
+╔════════════════════════════════════════════════════════════════════════════╗
+║ █████╗ ██████╗ ████████╗    ███╗   ██╗ ██████╗ ███╗   ███╗ █████╗ ██████═╗ ║
+║██╔══██╗██╔══██╗╚══██╔══╝    ████╗  ██║██╔═══██╗████╗ ████║██╔══██╗██╔══██║ ║
+║███████║██████╔╝   ██║       ██╔██╗ ██║██║   ██║██╔████╔██║███████║██║  ██║ ║
+║██╔══██║██╔═██║    ██║       ██║╚██╗██║██║   ██║██║╚██╔╝██║██╔══██║██║  ██║ ║
+║██║  ██║██║ ║██║   ██║       ██║ ╚████║╚██████╔╝██║ ╚═╝ ██║██║  ██║██████ ║ ║
+║╚═╝  ╚═╝╚═╝ ╚══╝   ╚═╝       ╚═╝  ╚═══╝ ╚═════╝ ╚═╝     ╚═╝╚═╝  ╚═╝╚══════╝ ║
+╚════════════════════════════════════════════════════════════════════════════╝
+  </pre>
+
+  <pre>
+
+Freedom Tour 
+
+A Roadside Art Adventure X Mobile Art Gallery on wheels  
+
+Art, Travel & Surf
+
+
+
+  </pre>
+
+</pre>
+  <button onclick="startHorse()">ENTER GAME</button>
+  <button onclick="window.location.href='artnomad-viewer.html'" style="margin-top:18px;font-size:16px;padding:0;background:none;color:#ccffcc;border:none;box-shadow:none;cursor:pointer;text-decoration:underline;">-skip intro-</button>
+</div>
+
+
+
+
+<div id="horseRun"></div>
+<div id="dustStorm"></div>
+<video id="introVideo" src="artnomad.mp4" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;max-width:100vw;max-height:100vh;width:100%;height:100%;object-fit:contain;z-index:1000;background:black;" autoplay muted playsinline></video>
+<style>
+@media (max-width: 600px) {
+  #introVideo {
+    width: 98vw !important;
+    height: 60vw !important;
+    max-width: 98vw !important;
+    max-height: 60vw !important;
+    left: 1vw !important;
+    top: 10vh !important;
+    border-radius: 12px;
+    box-shadow: 0 4px 32px #0008;
+  }
+}
+</style>
+
+
+<script>
+const frames = [
+`       _______\\)%%%%%%%%._              
+       \`''''-'-;   % % % % %'-._         
+               :b) \\            '-.      
+               : :__)'    .'    .'       
+               :.::/  '.'   .'           
+               o_i/   :    ;             
+                      :   .'             `,
+`       _______\\)%%%%%%%._              
+       \`''''-'-;   % % % % '-._         
+               :b) \\           '-.      
+               : :__)'   .'    .'        
+               :.::/ '.'   .'            
+               o_i/  :    ;              
+                     :   .'              `,
+`       _______\\)%%%%%%._              
+       \`''''-'-;   % % %  '-._         
+               :b) \\          '-.      
+               : :__)'  .'    .'        
+               :.::/'.'   .'            
+               o_i/:    ;               
+                    :   .'              `,
+`       _______\\)%%%%%._              
+       \`''''-'-;   % %   '-._         
+               :b) \\         '-.      
+               : :__) .'    .'         
+               :.::/.'   .'            
+               o_i/:   ;               
+                   :   .'              `,
+`       _______\\)%%%%._              
+       \`''''-'-;   %     '-._         
+               :b) \\        '-.      
+               : :__)'    .'          
+               :.::/   .'             
+               o_i/   ;               
+                    .'                `,
+`       _______\\)%%%._              
+       \`''''-'-;          '-._         
+               :b) \\       '-.      
+               : :__)    .'          
+               :.::   .'             
+               o_i/  ;               
+                   .'                `,
+`       _______\\)%%._              
+       \`''''-'-;         '-._         
+               :b) \\      '-.      
+               : :__)   .'          
+               :.::  .'             
+               o_i/ :               
+                  .'                `,
+`       _______\\)%._              
+       \`''''-'-;        '-._         
+               :b) \\     '-.      
+               : :__)  .'          
+               :.:: .'             
+               o_i/ :              
+                 .'                `,
+`       _______\\)._              
+       \`''''-'-;       '-._         
+               :b) \\    '-.      
+               : :__) .'          
+               :.::.              
+               o_i/ :             
+                .'                 `,
+`       _______\\)                 
+       \`''''-'-;      '-._         
+               :b) \\   '-.      
+               : :__)            
+               :.::              
+               o_i/              
+                                   `
+];
+
+function summonDustStorm() {
+  const storm = document.getElementById('dustStorm');
+  let tick = 0;
+  const dustInterval = setInterval(() => {
+    let dust = '';
+    for (let i = 0; i < 40; i++) {
+      dust += Array.from({ length: 80 }, () =>
+        ['~', '.', ':', ' '][Math.floor(Math.random() * 4)]
+      ).join('') + '\n';
+    }
+    storm.innerText = dust;
+    tick++;
+    if (tick > 20) {
+      clearInterval(dustInterval);
+      storm.innerText = '';
+    }
+  }, 100);
+}
+
+function startHorse() {
+  document.getElementById('startScreen').style.display = 'none';
+  const run = document.getElementById('horseRun');
+  run.style.display = 'flex';
+
+  let x = window.innerWidth + 200;
+  const trail = [];
+
+  const horse = document.createElement('div');
+  horse.className = 'horse';
+  run.appendChild(horse);
+
+  let frameIndex = 0;
+  const interval = setInterval(() => {
+    horse.innerHTML = `<pre>${frames[frameIndex]}</pre>`;
+    horse.style.left = x + 'px';
+    frameIndex = (frameIndex + 1) % frames.length;
+    x -= 20;
+
+    const ghost = document.createElement('div');
+    ghost.className = 'ghost';
+    ghost.style.left = (x + 40) + 'px';
+    ghost.innerHTML = `<pre>${frames[frameIndex]}</pre>`;
+    run.appendChild(ghost);
+    trail.push(ghost);
+
+    if (trail.length > 10) {
+      const old = trail.shift();
+      run.removeChild(old);
+    }
+
+    if (x < -400) {
+      clearInterval(interval);
+      run.style.display = 'none';
+      summonDustStorm();
+      setTimeout(() => {
+        // Show video after horse animation
+        const video = document.getElementById('introVideo');
+        video.style.display = 'block';
+        video.currentTime = 0;
+        video.play();
+        video.onended = function() {
+          window.location.href = '2.html';
+        };
+      }, 2000);
+    }
+  }, 100);
+}
+</script>
+
+</body>
+</html>

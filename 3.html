@@ -1,0 +1,186 @@
+<button id="continueBtn" style="
+  position:fixed; left:50%; top:-80px; transform:translateX(-50%); z-index:1000;
+  width:100px; height:100px; border-radius:50%;
+  font-size:1.1em; font-weight:bold; padding:0; background:conic-gradient(from 0deg, #ff0080, #7928ca, #00bfff, #00ffb8, #ff0080 360deg);
+  color:#fff; border:4px solid #fff; box-shadow:0 0 30px #00bfff99,0 0 10px #ff008099;
+  letter-spacing:2px; cursor:pointer; opacity:0; transition:box-shadow 0.2s;
+  display:flex; align-items:center; justify-content:center;
+  text-shadow: 0 0 8px #000, 0 0 2px #fff;
+">
+  Travel On
+</button>
+<style>
+@keyframes dropBounce {
+  0% { top: -80px; opacity: 0; }
+  10% { opacity: 1; }
+  70% { top: 75%; }
+  85% { top: 82%; }
+  92% { top: 78%; }
+  100% { top: 80%; }
+}
+#continueBtn.animated {
+  animation: dropBounce 1.5s cubic-bezier(.68,-0.55,.27,1.55) forwards;
+}
+#continueBtn:hover {
+  box-shadow:0 0 40px #fff,0 0 20px #ff0080,0 0 40px #00bfff;
+  filter: brightness(1.2) saturate(1.5);
+}
+</style>
+<script>
+  // Animate the button dropping down to the ground with a bounce and delay
+  const btn = document.getElementById('continueBtn');
+  setTimeout(() => {
+    btn.classList.add('animated');
+    btn.style.opacity = '1';
+  }, 1800); // Drop a little bit later
+  btn.onclick = function() {
+    window.location.href = '4.html';
+  };
+</script>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Drip Bounce Animation - Drops All Over Below Horizon</title>
+  <style>
+    html, body { height: 100%; margin: 0; background: #181818; }
+    body { width: 100vw; height: 100vh; overflow: hidden; background: #181818; }
+    canvas { background: #181818; display: block; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; }
+  </style>
+</head>
+<body>
+  <canvas id="dripCanvas"></canvas>
+  <script>
+    const canvas = document.getElementById('dripCanvas');
+    const ctx = canvas.getContext('2d');
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // Elongated ellipse parameters for drop impact
+    function getEllipse() {
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2 + canvas.height * 0.08;
+  // Make the ellipse much wider to fill the screen left-to-right
+  const rx = canvas.width * 0.48; // nearly full width
+  const ry = rx * 0.6; // keep it elongated but not too tall
+  return { cx, cy, rx, ry };
+    }
+
+  let drips = [];
+  let dripPool = [];
+
+
+    // No wipers or wiper logic
+  function render() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const {cx, cy, rx, ry} = getEllipse();
+    const horizon = canvas.height/2;
+    // ...existing code...
+  // ...existing code...
+  // ...existing code...
+  // ...existing code...
+
+    // ...existing code...
+  // Drip creation: spawn randomly inside the lower half of the ellipse (below horizon)
+    if (drips.length < 60 && Math.random() < 0.55) {
+      let tries = 0;
+      while (tries < 10) {
+        // Random point inside ellipse using polar coordinates
+        let theta = Math.random() * Math.PI * 2;
+        let u = Math.random();
+        let rNorm = Math.sqrt(u); // uniform distribution in ellipse
+        let impactX = cx + rx * rNorm * Math.cos(theta);
+        let impactY = cy + ry * rNorm * Math.sin(theta);
+        if (impactY > horizon) {
+          let startY = -40;
+          let startX = impactX;
+          drips.push({
+            x: startX,
+            y: startY,
+            impactX: impactX,
+            impactY: impactY,
+            vy: 0,
+            r: 6 + Math.random() * 8,
+            color: `hsl(${Math.random() * 360},100%,60%)`,
+            state: 'fall',
+            bounceVy: -6 - Math.random() * 2,
+            bounceCount: 0
+          });
+          break;
+        }
+        tries++;
+      }
+    }
+    for (let drip of drips) {
+      if (drip.state === 'fall') {
+        drip.vy += 0.38;
+        drip.y += drip.vy;
+        if (drip.y >= drip.impactY) {
+          drip.y = drip.impactY;
+          drip.state = 'bounce';
+          drip.vy = drip.bounceVy;
+          drip.bounceCount = 0;
+        }
+      } else if (drip.state === 'bounce') {
+        drip.vy += 0.28;
+        drip.y += drip.vy;
+        if (drip.vy > 0 && drip.y >= drip.impactY) {
+          drip.bounceCount++;
+          if (drip.bounceCount > 0) {
+            drip.state = 'pool';
+            dripPool.push({ x: drip.impactX, y: drip.impactY, r: drip.r, color: drip.color, t: 0 });
+          } else {
+            drip.y = drip.impactY;
+            drip.vy = drip.bounceVy * 0.45;
+          }
+        }
+      }
+    }
+    drips = drips.filter(d => d.state !== 'pool');
+    for (let pool of dripPool) {
+      pool.t++;
+      pool.r *= 1.01;
+      if (pool.t > 120) pool.remove = true;
+    }
+    dripPool = dripPool.filter(p => !p.remove);
+
+    for (let drip of drips) {
+      if (drip.impactY > horizon) {
+        ctx.save();
+        ctx.globalAlpha = 0.7;
+        ctx.beginPath();
+        ctx.arc(drip.x, drip.y, drip.r, 0, Math.PI * 2);
+        ctx.fillStyle = drip.color;
+        ctx.fill();
+        // Trail
+        if (drip.state === 'fall') {
+          ctx.globalAlpha = 0.3;
+          ctx.beginPath();
+          ctx.ellipse(drip.x, drip.y - drip.r * 2, drip.r * 0.7, drip.r * 2.5, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+    }
+    // Draw drip pools on the ellipse (only below horizon)
+    for (let pool of dripPool) {
+      if (pool.y > horizon) {
+        ctx.save();
+        ctx.globalAlpha = 0.18 + 0.3 * Math.sin(pool.t / 8);
+        ctx.beginPath();
+        ctx.ellipse(pool.x, pool.y, pool.r * 1.2, pool.r * 0.5, 0, 0, Math.PI * 2);
+        ctx.fillStyle = pool.color;
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+    requestAnimationFrame(render);
+  }
+  render();
+  </script>
+</body>
+</html>

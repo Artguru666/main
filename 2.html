@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Dissolve Then Converge Ritual</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: black;
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+      font-family: monospace;
+    }
+
+    .particle {
+      position: absolute;
+      font-size: 14px;
+      font-weight: bold;
+      color: #daa520;
+      pointer-events: none;
+      transition: transform 4s ease-in-out, opacity 4s ease-in-out;
+      opacity: 1;
+    }
+    #artnomad-link {
+      position: absolute;
+      left: 0; top: 0; width: 100vw; height: 40vh;
+      z-index: 100;
+      display: block;
+      pointer-events: auto;
+      text-decoration: none;
+      background: none;
+    }
+  </style>
+</head>
+<body>
+
+  <audio id="sound" src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_5b1e6f5b4a.mp3?filename=ambient-space-110997.mp3"></audio>
+  <a id="artnomad-link" href="3.html" title="Continue to next scene" style="display:none;"></a>
+  <button id="continueBtn" style="
+    display:none; position:fixed; left:50%; top:80%; transform:translateX(-50%); z-index:1000;
+    font-size:1.5em; padding:0.5em 2em; background:#222; color:#daa520; border:2px solid #daa520; border-radius:8px; cursor:pointer;">
+    Continue
+  </button>
+
+  <script>
+    const asciiStart = `+
+      
+       d8888 8888888b. 88888888888                           
+      d88888 888   Y88b    888                               
+     d88P888 888    888    888                               
+    d88P 888 888   d88P    888                               
+   d88P  888 8888888P"     888                               
+  d88P   888 888 T88b      888                               
+ d8888888888 888  T88b     888                               
+d88P     888 888   T88b    888                               
+                                                             
+                                                             
+                                                             
+888b    888  .d88888b.  888b     d888        d8888 8888888b. 
+8888b   888 d88P" "Y88b 8888b   d8888       d88888 888  "Y88b
+88888b  888 888     888 88888b.d88888      d88P888 888    888
+888Y88b 888 888     888 888Y88888P888     d88P 888 888    888
+888 Y88b888 888     888 888 Y888P 888    d88P  888 888    888
+888  Y88888 888     888 888  Y8P  888   d88P   888 888    888
+888   Y8888 Y88b. .d88P 888   "   888  d8888888888 888  .d88P
+888    Y888  "Y88888P"  888       888 d88P     888 8888888P"`;
+
+        const asciiTarget = ` art Thous life
+
+        
+                 ,,ggddY888Ybbgg,,
+          ,agd8""'   .d8888888888bga,
+       ,gdP""'     .d88888888888888888g,
+     ,dP"        ,d888888888888888888888b,
+   ,dP"         ,8888888888888888888888888b,
+  ,8"          ,8888888P"""88888888888888888,
+ ,8'           I888888I    )88888888888888888,
+,8'            \`8888888booo8888888888888888888,
+d'              \`88888888888888888888888888888b
+8                \`"8888888888888888888888888888
+8                  \`"88888888888888888888888888
+8                      \`"8888888888888888888888
+Y,                        \`8888888888888888888P
+\`8,                         \`88888888888888888'
+ \`8,              .oo.       \`888888888888888'
+  \`8a             8888        88888888888888'
+   \`Yba           \`""'       ,888888888888P'
+     "Yba                   ,88888888888'
+       \`"Yba,             ,8888888888P"'                
+          \`"Y8baa,      ,d88888888P"'
+               \`\`""YYba8888P888"`;
+
+    const sound = document.getElementById("sound");
+    const particles = [];
+
+    function renderAsciiParticles(text) {
+      const lines = text.trim().split('\n');
+      const centerX = window.innerWidth / 2;
+      const centerY = window.innerHeight / 2;
+      const cellW = 8;
+      const cellH = 16;
+      const maxCols = Math.max(...lines.map(l => l.length));
+      const maxRows = lines.length;
+
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      lines.forEach((line, row) => {
+        [...line].forEach((char, col) => {
+          const x = centerX + (col - maxCols / 2) * cellW;
+          const y = centerY + (row - maxRows / 2) * cellH;
+          if (char.trim()) {
+            minX = Math.min(minX, x);
+            minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x + cellW);
+            maxY = Math.max(maxY, y + cellH);
+          }
+          const p = document.createElement("div");
+          p.className = "particle";
+          p.innerText = char;
+          p.style.left = x + 'px';
+          p.style.top = y + 'px';
+          document.body.appendChild(p);
+          particles.push({ el: p, x0: x, y0: y });
+        });
+      });
+  // Position the clickable link over the ASCII art (but keep hidden until animation is done)
+  const link = document.getElementById('artnomad-link');
+  link.style.left = minX + 'px';
+  link.style.top = minY + 'px';
+  link.style.width = (maxX - minX) + 'px';
+  link.style.height = (maxY - minY) + 'px';
+  link.style.display = 'none';
+    }
+
+    function dissolveThenConverge() {
+      sound.play();
+
+      const targetLines = asciiTarget.trim().split('\n');
+      const centerX = window.innerWidth / 2;
+      const centerY = window.innerHeight / 2;
+      const cellW = 8;
+      const cellH = 16;
+      const maxCols = Math.max(...targetLines.map(l => l.length));
+      const maxRows = targetLines.length;
+
+      const targetGlyphs = [];
+      targetLines.forEach((line, row) => {
+        [...line].forEach((char, col) => {
+          targetGlyphs.push({ char, row, col });
+        });
+      });
+
+      particles.forEach((p, i) => {
+        const dx = (Math.random() - 0.5) * 800;
+        const dy = (Math.random() - 0.5) * 800;
+        setTimeout(() => {
+          p.el.style.transform = `translate(${dx}px, ${dy}px) scale(1.5)`;
+          p.el.style.opacity = '0.2';
+        }, i * 10);
+      });
+
+      setTimeout(() => {
+        particles.forEach((p, i) => {
+          const g = targetGlyphs[i % targetGlyphs.length];
+          const x1 = centerX + (g.col - maxCols / 2) * cellW;
+          const y1 = centerY + (g.row - maxRows / 2) * cellH;
+          setTimeout(() => {
+            p.el.innerText = g.char;
+            p.el.style.transform = `translate(${x1 - p.x0}px, ${y1 - p.y0}px) scale(1)`;
+            p.el.style.opacity = '1';
+            // Show continue button and link after all particles finish
+            if (i === particles.length - 1) {
+              setTimeout(() => {
+                const btn = document.getElementById('continueBtn');
+                const link = document.getElementById('artnomad-link');
+                btn.style.display = 'block';
+                link.style.display = 'block';
+                btn.onclick = () => { window.location.href = '3.html'; };
+              }, 500); // Wait a bit for all particles to settle
+            }
+          }, i * 10);
+        });
+      }, 5000);
+    }
+
+    window.addEventListener("DOMContentLoaded", () => {
+      renderAsciiParticles(asciiStart);
+    });
+
+    // Only trigger dissolve on click or touch if not clicking the link, and only if animation not started
+    let animationStarted = false;
+    function startAnimationIfAllowed(e) {
+      const link = document.getElementById('artnomad-link');
+      if (e.target === link || animationStarted) return;
+      animationStarted = true;
+      dissolveThenConverge();
+    }
+    window.addEventListener("click", startAnimationIfAllowed);
+    window.addEventListener("touchstart", startAnimationIfAllowed);
+  </script>
+</body>
+</html>

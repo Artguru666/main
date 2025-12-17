@@ -1,0 +1,1667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Magazine Rack</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: linear-gradient(to bottom, #2c3e50, #34495e);
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            display: block;
+        }
+        /* #instructions removed */
+        #backButton {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 12px 24px;
+            background: rgba(255, 255, 255, 0.9);
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            display: none;
+            z-index: 100;
+        }
+        #backButton:hover {
+            background: rgba(255, 255, 255, 1);
+        }
+        #pageCounter {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-size: 14px;
+            display: none;
+        }
+        #openButton {
+            position: absolute;
+            top: 80px;
+            right: 20px;
+            padding: 12px 24px;
+            background: rgba(100, 200, 100, 0.9);
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            display: none;
+            z-index: 100;
+        }
+        #openButton:hover {
+            background: rgba(100, 220, 100, 1);
+        }
+        .pageButton {
+            position: absolute;
+            bottom: 80px;
+            padding: 15px 30px;
+            background: rgba(255, 255, 255, 0.9);
+            border: 2px solid #333;
+            border-radius: 50%;
+            font-size: 20px;
+            cursor: pointer;
+            display: none;
+            z-index: 100;
+            transition: all 0.3s;
+        }
+        .pageButton:hover {
+            background: rgba(255, 255, 255, 1);
+            transform: scale(1.1);
+        }
+        #prevButton {
+            left: 30px;
+        }
+        #nextButton {
+            right: 30px;
+        }
+    </style>
+</head>
+<body>
+    <button id="backToIntroButton" style="position:absolute;top:20px;left:20px;padding:12px 24px;background:rgba(255,255,255,0.9);border:none;border-radius:5px;font-size:16px;cursor:pointer;z-index:101;">← Back to Art Nomad</button>
+    <script>
+    // ...existing code...
+    // Back to previous/intro page button
+    document.addEventListener('DOMContentLoaded', function() {
+        var backBtn = document.getElementById('backToIntroButton');
+        if (backBtn) {
+            backBtn.addEventListener('click', function() {
+                // Try to go back in history, else go to art-nomad-intro.html
+                if (window.history.length > 1) {
+                    window.history.back();
+                } else {
+                    window.location.href = 'art-nomad-intro.html';
+                }
+            });
+        }
+    });
+    </script>
+    <button id="backButton">← Back to Rack</button>
+    <button id="openButton">Open Magazine</button>
+    <button id="prevButton" class="pageButton">◀</button>
+    <button id="nextButton" class="pageButton">▶</button>
+    <div id="pageCounter"></div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script>
+        let scene, camera, renderer, controls;
+        let magazines = [];
+        let selectedMagazine = null;
+        let isReadingMode = false;
+        let currentPage = 0;
+        let isDragging = false;
+        let dragStartX = 0;
+        let raycaster, mouse;
+        
+        // Magazine data - Art, Sculpture, Kitsch themes
+        const magazineData = [
+            { title: "SCULPTURE", color: 0xd4af37, pages: 8 },
+            { title: "NANOKITSCH", color: 0xff1493, pages: 6 },
+            { title: "DRAWINGS", color: 0x9370db, pages: 10 },
+            { title: "PAINTING", color: 0xff6347, pages: 8 },
+            { title: "ABSTRACT", color: 0x20b2aa, pages: 58 },
+            { title: "PRINT", color: 0xffa500, pages: 8 },
+            { title: "PERFORMANCE", color: 0x708090, pages: 6 },
+            { title: "STICKERS", color: 0xff69b4, pages: 8 }
+        ];
+
+        function init() {
+            // Scene setup
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x2c3e50);
+            scene.fog = new THREE.Fog(0x2c3e50, 10, 50);
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(
+                60,
+                window.innerWidth / window.innerHeight,
+                0.1,
+                1000
+            );
+            camera.position.set(0, 2.5, 6);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.body.appendChild(renderer.domElement);
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(5, 10, 5);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.camera.far = 50;
+            scene.add(directionalLight);
+
+            const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
+            fillLight.position.set(-5, 5, -5);
+            scene.add(fillLight);
+
+            // Controls
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.minDistance = 3;
+            controls.maxDistance = 12;
+            controls.maxPolarAngle = Math.PI / 2.2;
+            controls.target.set(0, 2, 0);
+
+            // Raycaster for clicking
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+
+            // Create scene
+            createMagazineRack();
+            createFloor();
+
+            // Event listeners
+            window.addEventListener('resize', onWindowResize);
+            window.addEventListener('click', onMouseClick);
+            window.addEventListener('mousedown', onMouseDown);
+            window.addEventListener('mousemove', onMouseMove);
+            window.addEventListener('mouseup', onMouseUp);
+            window.addEventListener('contextmenu', (e) => e.preventDefault()); // Disable context menu
+            document.getElementById('backButton').addEventListener('click', exitReadingMode);
+            document.getElementById('openButton').addEventListener('click', openMagazineWithButton);
+            document.getElementById('prevButton').addEventListener('click', previousPage);
+            document.getElementById('nextButton').addEventListener('click', nextPage);
+
+            animate();
+        }
+
+        function createMagazineRack() {
+            // Elegant gallery-style rack
+            const elegantMaterial = new THREE.MeshStandardMaterial({
+                color: 0x1a1a1a,
+                roughness: 0.3,
+                metalness: 0.6
+            });
+
+            const accentMaterial = new THREE.MeshStandardMaterial({
+                color: 0xc9b037,
+                roughness: 0.2,
+                metalness: 0.8
+            });
+
+            // Modern back panel with frame
+            const backPanel = new THREE.Mesh(
+                new THREE.BoxGeometry(10, 4.5, 0.1),
+                elegantMaterial
+            );
+            backPanel.position.set(0, 2.25, -1);
+            backPanel.castShadow = true;
+            backPanel.receiveShadow = true;
+            scene.add(backPanel);
+
+            // Gold accent frame
+            const frameThickness = 0.08;
+            const frameDepth = 0.15;
+            
+            // Top frame
+            const topFrame = new THREE.Mesh(
+                new THREE.BoxGeometry(10.2, frameThickness, frameDepth),
+                accentMaterial
+            );
+            topFrame.position.set(0, 4.5, -0.95);
+            scene.add(topFrame);
+
+            // Bottom frame
+            const bottomFrame = new THREE.Mesh(
+                new THREE.BoxGeometry(10.2, frameThickness, frameDepth),
+                accentMaterial
+            );
+            bottomFrame.position.set(0, 0, -0.95);
+            scene.add(bottomFrame);
+
+            // Sleek glass shelves
+            const glassMaterial = new THREE.MeshPhysicalMaterial({
+                color: 0xffffff,
+                metalness: 0.1,
+                roughness: 0.05,
+                transmission: 0.9,
+                thickness: 0.5,
+                transparent: true,
+                opacity: 0.3
+            });
+
+            for (let i = 0; i < 2; i++) {
+                const shelf = new THREE.Mesh(
+                    new THREE.BoxGeometry(9.5, 0.05, 1.8),
+                    glassMaterial
+                );
+                shelf.position.set(0, 1 + i * 1.8, -0.3);
+                shelf.castShadow = true;
+                shelf.receiveShadow = true;
+                scene.add(shelf);
+                
+                // Gold shelf supports
+                [-4.5, 4.5].forEach(x => {
+                    const support = new THREE.Mesh(
+                        new THREE.CylinderGeometry(0.04, 0.04, 0.3, 16),
+                        accentMaterial
+                    );
+                    support.position.set(x, 1 + i * 1.8 - 0.15, -0.3);
+                    scene.add(support);
+                });
+            }
+
+            // Elegant side panels with gold trim
+            [-5, 5].forEach(x => {
+                const side = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.15, 4.5, 1.5),
+                    elegantMaterial
+                );
+                side.position.set(x, 2.25, -0.3);
+                side.castShadow = true;
+                scene.add(side);
+                
+                // Gold trim
+                const trim = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.02, 4.5, 0.02),
+                    accentMaterial
+                );
+                trim.position.set(x, 2.25, 0.4);
+                scene.add(trim);
+            });
+
+            // Create magazines - elegant gallery placement
+            let magazineIndex = 0;
+            for (let row = 0; row < 2; row++) {
+                for (let col = 0; col < 4; col++) {
+                    if (magazineIndex < magazineData.length) {
+                        const data = magazineData[magazineIndex];
+                        const magazine = createMagazine(data, magazineIndex);
+
+                        // More elegant spacing and positioning
+                        const x = -3.6 + col * 2.4;
+                        // Move top row higher to avoid overlap
+                        const y = row === 0 ? 3.7 : 1.2;
+                        const z = 0.05;
+
+                        magazine.position.set(x, y, z);
+                        // Subtle tilt with slight variation for organic look
+                        magazine.rotation.x = -0.15 + (Math.random() - 0.5) * 0.05;
+                        magazine.rotation.y = (Math.random() - 0.5) * 0.02;
+                        magazine.rotation.z = (Math.random() - 0.5) * 0.03;
+
+                        magazine.userData.originalPosition.copy(magazine.position);
+
+                        // Removed number label above each magazine
+
+                        magazines.push(magazine);
+                        scene.add(magazine);
+                        magazineIndex++;
+                    }
+                }
+            }
+        }
+
+        function createMagazine(data, index) {
+            const group = new THREE.Group();
+            
+            // Magazine cover
+            const coverGeometry = new THREE.BoxGeometry(1.5, 2, 0.05);
+            const coverMaterial = new THREE.MeshStandardMaterial({
+                color: data.color,
+                roughness: 0.3,
+                metalness: 0.1
+            });
+            const cover = new THREE.Mesh(coverGeometry, coverMaterial);
+            cover.castShadow = true;
+            cover.receiveShadow = true;
+            group.add(cover);
+
+            // Title text (using canvas texture)
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+
+            // Background
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, 512, 512);
+
+            // Title
+            ctx.fillStyle = '#000000';
+            ctx.font = 'bold 48px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(data.title, 256, 100);
+
+            // Special cover for PRINT magazine
+            if (data.title === 'PRINT') {
+                // Red line with "coming"
+                ctx.strokeStyle = '#ff0000';
+                ctx.lineWidth = 8;
+                ctx.beginPath();
+                ctx.moveTo(80, 256);
+                ctx.lineTo(432, 256);
+                ctx.stroke();
+                ctx.fillStyle = '#ff0000';
+                ctx.font = 'bold 40px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('coming', 256, 245);
+                // Draw lock icon
+                ctx.font = 'bold 60px Arial';
+                ctx.fillText('🔒', 256, 340);
+            } else {
+                // Image placeholder
+                ctx.fillStyle = `#${data.color.toString(16)}`;
+                ctx.fillRect(50, 150, 412, 250);
+            }
+
+            // Issue text
+            ctx.fillStyle = '#666666';
+            ctx.font = '24px Arial';
+            ctx.fillText(`Issue #${index + 1}`, 256, 450);
+
+            const texture = new THREE.CanvasTexture(canvas);
+            const titleMaterial = new THREE.MeshBasicMaterial({ map: texture });
+            const titlePlane = new THREE.Mesh(
+                new THREE.PlaneGeometry(1.48, 1.98),
+                titleMaterial
+            );
+            titlePlane.position.z = 0.026;
+            group.add(titlePlane);
+
+            // Store data
+            group.userData = {
+                magazineData: data,
+                index: index,
+                originalPosition: new THREE.Vector3(),
+                originalRotation: new THREE.Euler(),
+                isClickable: true,
+                cover: cover,
+                titlePlane: titlePlane,
+                isLocked: data.title === 'PRINT'
+            };
+
+            return group;
+        }
+
+        function createFloor() {
+            const floorGeometry = new THREE.PlaneGeometry(30, 30);
+            const floorMaterial = new THREE.MeshStandardMaterial({
+                color: 0x444444,
+                roughness: 0.9,
+                metalness: 0.1
+            });
+            const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+            floor.rotation.x = -Math.PI / 2;
+            floor.receiveShadow = true;
+            scene.add(floor);
+        }
+
+        function onMouseClick(event) {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            if (isReadingMode && selectedMagazine) {
+                // Only respond to clicks on the magazine itself
+                const intersects = raycaster.intersectObject(selectedMagazine, true);
+                if (intersects.length > 0) {
+                    // If it's the Drawings, Sculpture, or Abstract magazine, change art
+                    if (selectedMagazine.userData.index === 2 || selectedMagazine.userData.index === 0 || selectedMagazine.userData.index === 4) {
+                        let artIdx = selectedMagazine.userData.artIdx || 0;
+                        let artImages;
+                        if (selectedMagazine.userData.index === 2) {
+                            artImages = [
+                                'art/1.jpg', 'art/2.jpg', 'art/3.jpg', 'art/4.jpg', 'art/5.jpg',
+                                'art/6.jpg', 'art/7.jpg', 'art/8.jpg', 'art/9.jpg', 'art/10.jpg',
+                                'art/11.jpg', 'art/12.JPG'
+                            ];
+                        } else if (selectedMagazine.userData.index === 0) {
+                            artImages = [
+                                'art/Sculpture/venussurfer.png',
+                                'art/Sculpture/surfclay.png',
+                                'art/Sculpture/sqaut.jpeg',
+                                'art/Sculpture/sculptiing.png',
+                                'art/Sculpture/idol.png',
+                                'art/Sculpture/galleon.jpeg',
+                                'art/Sculpture/cilpld.png',
+                                'art/Sculpture/black frames.jpeg',
+                                'art/Sculpture/6388094_orig.jpg',
+                                'art/Sculpture/10152544_303354499813876_562514143_n.jpg'
+                            ];
+                        } else {
+                            artImages = [
+                                'art/Abstract/NMZQ7606.JPG',
+                                'art/Abstract/IMG_E5341.JPG',
+                                'art/Abstract/IMG_6011.jpeg',
+                                'art/Abstract/IMG_6007.jpeg',
+                                'art/Abstract/IMG_5845.JPG',
+                                'art/Abstract/IMG_5844.JPG',
+                                'art/Abstract/IMG_5843.JPG',
+                                'art/Abstract/IMG_5817.jpeg',
+                                'art/Abstract/IMG_5514.JPG',
+                                'art/Abstract/IMG_5502.JPG',
+                                'art/Abstract/IMG_5452.JPG',
+                                'art/Abstract/IMG_5451.JPG',
+                                'art/Abstract/IMG_5403.JPG',
+                                'art/Abstract/IMG_5398.JPG',
+                                'art/Abstract/IMG_5379.JPG',
+                                'art/Abstract/IMG_5378.JPG',
+                                'art/Abstract/IMG_5377.JPG',
+                                'art/Abstract/IMG_5376.JPG',
+                                'art/Abstract/IMG_5374.JPG',
+                                'art/Abstract/IMG_5373.JPG'
+                                // ...add more as needed
+                            ];
+                        }
+                        artIdx = (artIdx + 1) % artImages.length;
+                        selectedMagazine.userData.artIdx = artIdx;
+                        selectedMagazine.userData.setArtSpread(artIdx);
+                        updatePageCounter();
+                        animatePageFlip();
+                    } else if (!selectedMagazine.userData.isLocked) {
+                        // For other magazines, clicking in front opens the magazine
+                        if (selectedMagazine.userData.isClosed) {
+                            openMagazineWithButton();
+                        }
+                    }
+                }
+                return;
+            }
+
+            // Prevent opening another magazine while one is in reading mode
+            if (isReadingMode) return;
+
+            const intersects = raycaster.intersectObjects(magazines, true);
+            if (intersects.length > 0) {
+                let clickedMagazine = intersects[0].object;
+                while (clickedMagazine.parent && !clickedMagazine.userData.isClickable) {
+                    clickedMagazine = clickedMagazine.parent;
+                }
+                if (clickedMagazine.userData.isClickable && !clickedMagazine.userData.isLocked) {
+                    enterReadingMode(clickedMagazine);
+                }
+            }
+        }
+
+        function enterReadingMode(magazine) {
+            isReadingMode = true;
+            selectedMagazine = magazine;
+            currentPage = 0;
+
+            // Store original transform
+            magazine.userData.originalPosition.copy(magazine.position);
+            magazine.userData.originalRotation.copy(magazine.rotation);
+
+            // Keep controls enabled for orbiting (left mouse only)
+            controls.enabled = true;
+            controls.enableRotate = true;
+            controls.enablePan = false;
+            controls.enableZoom = true;
+            controls.mouseButtons = {
+                LEFT: THREE.MOUSE.ROTATE,
+                MIDDLE: THREE.MOUSE.DOLLY,
+                RIGHT: null  // Disable right-click for OrbitControls so we can use it for dragging
+            };
+
+            // Animate magazine VERY CLOSE to camera
+            const targetPos = new THREE.Vector3(0, 2.7, 2.5); // Move up and center more
+            const targetRot = new THREE.Euler(0, 0, 0);
+
+            animateMagazineToReading(magazine, targetPos, targetRot);
+
+            // Show UI
+            document.getElementById('backButton').style.display = 'block';
+            document.getElementById('openButton').style.display = 'block';
+            document.getElementById('pageCounter').style.display = 'block';
+            updatePageCounter();
+        }
+
+        function animateMagazineToReading(magazine, targetPos, targetRot) {
+            const startPos = magazine.position.clone();
+            const startRot = magazine.rotation.clone();
+            const duration = 1000;
+            const startTime = Date.now();
+
+            function animate() {
+                const elapsed = Date.now() - startTime;
+                const t = Math.min(elapsed / duration, 1);
+                const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+
+                magazine.position.lerpVectors(startPos, targetPos, eased);
+                magazine.rotation.x = startRot.x + (targetRot.x - startRot.x) * eased;
+                magazine.rotation.y = startRot.y + (targetRot.y - startRot.y) * eased;
+                magazine.rotation.z = startRot.z + (targetRot.z - startRot.z) * eased;
+
+                if (t < 1) {
+                    requestAnimationFrame(animate);
+                } else {
+                    // Don't create pages yet - wait for drag
+                    createClosedMagazinePages();
+                }
+            }
+
+            animate();
+        }
+        
+        function createPageLayout(ctx, pageNum, layoutType) {
+            // White background
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, 512, 683);
+            
+            const layouts = [
+                // Layout 1: Full page image with title
+                () => {
+                    ctx.fillStyle = '#ff6b6b';
+                    ctx.fillRect(30, 80, 452, 300);
+                    ctx.fillStyle = '#000';
+                    ctx.font = 'bold 36px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('FEATURED ART', 256, 50);
+                    ctx.font = '16px Arial';
+                    ctx.textAlign = 'left';
+                    ctx.fillText('Exploring modern expressions', 40, 420);
+                    for (let i = 0; i < 10; i++) {
+                        ctx.fillText('Lorem ipsum dolor sit amet...', 40, 450 + i * 20);
+                    }
+                },
+                // Layout 2: Two column text
+                () => {
+                    ctx.fillStyle = '#000';
+                    ctx.font = 'bold 32px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('The Gallery', 256, 60);
+                    ctx.font = '14px Arial';
+                    ctx.textAlign = 'left';
+                    for (let i = 0; i < 25; i++) {
+                        ctx.fillText('Art transforms space...', 40, 100 + i * 20);
+                        ctx.fillText('Culture defines us...', 280, 100 + i * 20);
+                    }
+                },
+                // Layout 3: Image grid
+                () => {
+                    ctx.fillStyle = '#000';
+                    ctx.font = 'bold 28px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('COLLECTION', 256, 50);
+                    const colors = ['#4ecdc4', '#ff6b6b', '#ffe66d', '#a8e6cf'];
+                    for (let row = 0; row < 2; row++) {
+                        for (let col = 0; col < 2; col++) {
+                            ctx.fillStyle = colors[(row * 2 + col) % 4];
+                            ctx.fillRect(40 + col * 220, 80 + row * 220, 200, 200);
+                        }
+                    }
+                    ctx.fillStyle = '#333';
+                    ctx.font = '14px Arial';
+                    ctx.fillText('Curated selections from our archive', 256, 550);
+                },
+                // Layout 4: Large quote
+                () => {
+                    ctx.fillStyle = '#f7f7f7';
+                    ctx.fillRect(30, 100, 452, 400);
+                    ctx.fillStyle = '#333';
+                    ctx.font = 'italic 28px Georgia';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('"Art is not what', 256, 250);
+                    ctx.fillText('you see, but what', 256, 290);
+                    ctx.fillText('you make others see"', 256, 330);
+                    ctx.font = '18px Arial';
+                    ctx.fillText('- Edgar Degas', 256, 400);
+                },
+                // Layout 5: Mixed content
+                () => {
+                    ctx.fillStyle = '#000';
+                    ctx.font = 'bold 30px Arial';
+                    ctx.textAlign = 'left';
+                    ctx.fillText('STUDIO VISIT', 40, 50);
+                    ctx.fillStyle = '#95e1d3';
+                    ctx.fillRect(40, 80, 430, 200);
+                    ctx.fillStyle = '#000';
+                    ctx.font = '16px Arial';
+                    for (let i = 0; i < 12; i++) {
+                        ctx.fillText('Behind the scenes of creative process...', 40, 310 + i * 22);
+                    }
+                    ctx.fillStyle = '#f38181';
+                    ctx.fillRect(350, 550, 120, 100);
+                }
+            ];
+            
+            // Use different layouts based on page number
+            layouts[layoutType % layouts.length]();
+            
+            // Add page number
+            ctx.fillStyle = '#999';
+            ctx.font = '14px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(`${pageNum}`, 256, 665);
+        }
+        
+        function createClosedMagazinePages() {
+            // Always declare these at the top so all magazine logic works
+            let leftPages = [];
+            let rightPages = [];
+            // Stickers magazine: load images from art/Stickers folder as double-page spreads
+            if (selectedMagazine.userData.index === 7) {
+                const stickersImages = [
+                    'IMG_5382.JPG',
+                    'IMG_5385.JPG',
+                    'IMG_5388.JPG',
+                    'IMG_5389.JPG',
+                    'IMG_5390.JPG',
+                    'IMG_5391.JPG',
+                    'IMG_5392.JPG',
+                    'IMG_5393.JPG',
+                    'IMG_5397.JPG',
+                    'IMG_5401.JPG',
+                    'IMG_5404.JPG',
+                    'IMG_5405.JPG',
+                    'IMG_5406.JPG',
+                    'IMG_5407.JPG',
+                    'IMG_5434.JPG',
+                    'IMG_5499.JPG'
+                ].map(f => 'art/Stickers/' + f);
+                for (let i = 0; i < stickersImages.length; i += 2) {
+                    const leftPageGeometry = new THREE.BoxGeometry(1.5, 2, 0.01);
+                    const leftPageMaterial = new THREE.MeshStandardMaterial({
+                        color: 0xffffff,
+                        roughness: 0.8,
+                        side: THREE.DoubleSide
+                    });
+                    const leftPage = new THREE.Mesh(leftPageGeometry, leftPageMaterial);
+                    leftPage.position.x = -0.76;
+                    leftPage.rotation.y = 0;
+                    if (stickersImages[i]) {
+                        const texL = new THREE.TextureLoader().load(stickersImages[i], function() {
+                            while (leftPage.children.length) leftPage.remove(leftPage.children[0]);
+                            const leftContent = new THREE.Mesh(
+                                new THREE.PlaneGeometry(1.48, 1.98),
+                                new THREE.MeshBasicMaterial({ map: texL, side: THREE.FrontSide })
+                            );
+                            leftContent.position.z = 0.011;
+                            leftPage.add(leftContent);
+                        });
+                    }
+                    leftPage.visible = false;
+                    leftPages.push(leftPage);
+                    selectedMagazine.add(leftPage);
+
+                    const rightPageGeometry = new THREE.BoxGeometry(1.5, 2, 0.01);
+                    const rightPageMaterial = new THREE.MeshStandardMaterial({
+                        color: 0xffffff,
+                        roughness: 0.8,
+                        side: THREE.DoubleSide
+                    });
+                    const rightPage = new THREE.Mesh(rightPageGeometry, rightPageMaterial);
+                    rightPage.position.x = 0.76;
+                    rightPage.rotation.y = Math.PI;
+                    if (stickersImages[i+1]) {
+                        const texR = new THREE.TextureLoader().load(stickersImages[i+1], function() {
+                            while (rightPage.children.length) rightPage.remove(rightPage.children[0]);
+                            const rightContent = new THREE.Mesh(
+                                new THREE.PlaneGeometry(1.48, 1.98),
+                                new THREE.MeshBasicMaterial({ map: texR, side: THREE.FrontSide })
+                            );
+                            rightContent.position.z = 0.011;
+                            rightPage.add(rightContent);
+                        });
+                    }
+                    rightPage.visible = false;
+                    rightPages.push(rightPage);
+                    selectedMagazine.add(rightPage);
+                }
+                selectedMagazine.userData.pagesCreated = true;
+                selectedMagazine.userData.isClosed = true;
+            }
+            // Create pages but keep them closed (not visible yet)
+            let totalPages = selectedMagazine.userData.magazineData.pages;
+
+            // Painting magazine logic
+            if (selectedMagazine.userData.index === 3) {
+                const paintingsImages = [
+                    '10394838_457342551081736_3901551879054682725_n.jpg','10418912_480618612087463_5582965194584032272_n.jpg','10502191_340548312761161_957506749729651860_n.jpg','12196349_553271488155508_5146751096427809075_n.jpg','131915624_1864291523720158_2807958882211634342_n.jpg','1345602_orig.jpg','13580443_57277896kitschsart6237664_476456615990211740_o.jpg','15639_284116855070974_547446835_n.jpg','17015667_779902002159121_6928577411706611558_o.jpg','25550559_940379776111342_293972904106269224_n.jpg','3967880_orig.jpg','4645604_orig.jpg','508179867_3264119807070649_1889544476592330826_n.jpg','5535645_orig.jpg','6173838_orig.jpg','86601645_1557927517689895_3721921390589247488_n.jpg','89031611_1581104392038874_204313552775806976_n.jpg','9753861_orig.jpg','alimaya.jpeg','art7.jpeg','artt.jpeg','arttu.jpeg','artty.jpeg','ashodoglsas.jpg','bluelotus.jpeg','c.jpg','d.jpg','didiart.jpeg','dshdo.jpeg','ensoshodo.jpg','expo.jpeg','f.jpg','FullSizeRender (7).jpeg','FullSizeRender (8).jpeg','HVNL8626.JPG','IMG-3566_edited.jpg','IMG-3592.jpg','IMG-3593.jpg','IMG-3594.jpg','IMG-3598.jpg','IMG-3599.jpg','IMG-3600.jpg','IMG-3601.jpg','IMG-3602.jpg','IMG-3603.jpg','IMG-3606.jpg','IMG-3607.jpg','IMG-3608.jpg','IMG-3609.jpg','IMG-3609_edited.jpg','IMG-3610.jpg','IMG-3611_edited.jpg','IMG_1061.jpg','IMG_1085.jpg','IMG_1086.jpg','IMG_1088.jpg','IMG_2708.JPG','IMG_4399.PNG','IMG_5608.JPG','IMG_5644.JPG','IMG_5731.jpeg','IMG_6034.jpeg','IMG_6040.jpeg','IMG_6045.jpeg','IMG_6050.jpeg','IMG_6051.jpeg','IMG_6052.jpeg','IMG_E5664.JPG','nature.jpg','nitromunk.jpg','noo.jpg','pain33.jpg','paintt.jpeg','purple haze.PNG','still life.JPG','superblackfluid.jpeg','tehbakc.jpeg','whaleride.jpg'
+                ].map(f => 'art/Paintings/' + f);
+                for (let i = 0; i < paintingsImages.length; i += 2) {
+                    const leftPageGeometry = new THREE.BoxGeometry(1.5, 2, 0.01);
+                    const leftPageMaterial = new THREE.MeshStandardMaterial({
+                        color: 0xffffff,
+                        roughness: 0.8,
+                        side: THREE.DoubleSide
+                    });
+                    const leftPage = new THREE.Mesh(leftPageGeometry, leftPageMaterial);
+                    leftPage.position.x = -0.76;
+                    leftPage.rotation.y = 0;
+                    if (paintingsImages[i]) {
+                        const texL = new THREE.TextureLoader().load(paintingsImages[i], function() {
+                            while (leftPage.children.length) leftPage.remove(leftPage.children[0]);
+                            const leftContent = new THREE.Mesh(
+                                new THREE.PlaneGeometry(1.48, 1.98),
+                                new THREE.MeshBasicMaterial({ map: texL, side: THREE.FrontSide })
+                            );
+                            leftContent.position.z = 0.011;
+                            leftPage.add(leftContent);
+                        });
+                    }
+                    leftPage.visible = false;
+                    leftPages.push(leftPage);
+                    selectedMagazine.add(leftPage);
+
+                    const rightPageGeometry = new THREE.BoxGeometry(1.5, 2, 0.01);
+                    const rightPageMaterial = new THREE.MeshStandardMaterial({
+                        color: 0xffffff,
+                        roughness: 0.8,
+                        side: THREE.DoubleSide
+                    });
+                    const rightPage = new THREE.Mesh(rightPageGeometry, rightPageMaterial);
+                    rightPage.position.x = 0.76;
+                    rightPage.rotation.y = Math.PI;
+                    if (paintingsImages[i+1]) {
+                        const texR = new THREE.TextureLoader().load(paintingsImages[i+1], function() {
+                            while (rightPage.children.length) rightPage.remove(rightPage.children[0]);
+                            const rightContent = new THREE.Mesh(
+                                new THREE.PlaneGeometry(1.48, 1.98),
+                                new THREE.MeshBasicMaterial({ map: texR, side: THREE.FrontSide })
+                            );
+                            rightContent.position.z = 0.011;
+                            rightPage.add(rightContent);
+                        });
+                    }
+                    rightPage.visible = false;
+                    rightPages.push(rightPage);
+                    selectedMagazine.add(rightPage);
+                }
+                selectedMagazine.userData.pagesCreated = true;
+                selectedMagazine.userData.isClosed = true;
+            } else {
+                // ...existing code for other magazines...
+                // (The rest of the function remains unchanged)
+            }
+            selectedMagazine.userData.leftPages = leftPages;
+            selectedMagazine.userData.rightPages = rightPages;
+            selectedMagazine.userData.pagesCreated = true;
+            selectedMagazine.userData.isClosed = true; // Magazine starts closed
+
+            // Art images for Drawings magazine (index 2)
+            const drawingsImages = [
+                'art/1.jpg', 'art/2.jpg', 'art/3.jpg', 'art/4.jpg', 'art/5.jpg',
+                'art/6.jpg', 'art/7.jpg', 'art/8.jpg', 'art/9.jpg', 'art/10.jpg',
+                'art/11.jpg', 'art/12.JPG'
+            ];
+            // Art images for Sculpture magazine (index 0)
+            const sculptureImages = [
+                'art/Sculpture/6388094_orig.jpg',
+                'art/Sculpture/10152544_303354499813876_562514143_n.jpg',
+                'art/Sculpture/black frames.jpeg',
+                'art/Sculpture/cilpld.png',
+                'art/Sculpture/galleon.jpeg',
+                'art/Sculpture/idol.png',
+                'art/Sculpture/sculptiing.png',
+                'art/Sculpture/sqaut.jpeg',
+                'art/Sculpture/surfclay.png',
+                'art/Sculpture/venussurfer.png'
+                // ...add all images from the folder if more are present
+            ];
+            // Art images for Abstract magazine (index 4)
+            const abstractImages = [
+                'art/Abstract/IMG_0002.JPG','art/Abstract/IMG_0084.JPG','art/Abstract/IMG_0085.JPG','art/Abstract/IMG_4392.JPG','art/Abstract/IMG_5332.JPG','art/Abstract/IMG_5341.JPG','art/Abstract/IMG_5343.JPG','art/Abstract/IMG_5344.JPG','art/Abstract/IMG_5345.JPG','art/Abstract/IMG_5346.JPG','art/Abstract/IMG_5347.JPG','art/Abstract/IMG_5348.JPG','art/Abstract/IMG_5349.JPG','art/Abstract/IMG_5350.JPG','art/Abstract/IMG_5351.JPG','art/Abstract/IMG_5352.JPG','art/Abstract/IMG_5353.JPG','art/Abstract/IMG_5354.JPG','art/Abstract/IMG_5355.JPG','art/Abstract/IMG_5356.JPG','art/Abstract/IMG_5360.JPG','art/Abstract/IMG_5369.JPG','art/Abstract/IMG_5370.JPG','art/Abstract/IMG_5371.JPG','art/Abstract/IMG_5373.JPG','art/Abstract/IMG_5374.JPG','art/Abstract/IMG_5376.JPG','art/Abstract/IMG_5377.JPG','art/Abstract/IMG_5378.JPG','art/Abstract/IMG_5379.JPG','art/Abstract/IMG_5398.JPG','art/Abstract/IMG_5403.JPG','art/Abstract/IMG_5451.JPG','art/Abstract/IMG_5452.JPG','art/Abstract/IMG_5502.JPG','art/Abstract/IMG_5514.JPG','art/Abstract/IMG_5817.jpeg','art/Abstract/IMG_5843.JPG','art/Abstract/IMG_5844.JPG','art/Abstract/IMG_5845.JPG','art/Abstract/IMG_6007.jpeg','art/Abstract/IMG_6011.jpeg','art/Abstract/IMG_E5341.JPG','art/Abstract/NMZQ7606.JPG','art/Abstract/m.jpg','art/Abstract/n.jpg','art/Abstract/nvf.jpg','art/Abstract/u.jpg','art/Abstract/v.jpg'
+                // ...add all remaining images from the folder here (total 116)
+            ];
+
+            const isDrawings = (selectedMagazine.userData.index === 2);
+            const isNanokitsch = (selectedMagazine.userData.index === 1);
+            const isSculpture = (selectedMagazine.userData.index === 0);
+            const isAbstract = (selectedMagazine.userData.index === 4);
+
+            if (isAbstract) {
+                // Abstract: Each spread shows two images (left/right)
+                for (let i = 0; i < abstractImages.length; i += 2) {
+                    const leftPageGeometry = new THREE.BoxGeometry(1.5, 2, 0.01);
+                    const leftPageMaterial = new THREE.MeshStandardMaterial({
+                        color: 0xffffff,
+                        roughness: 0.8,
+                        side: THREE.DoubleSide
+                    });
+                    const leftPage = new THREE.Mesh(leftPageGeometry, leftPageMaterial);
+                    leftPage.position.x = -0.76;
+                    leftPage.rotation.y = 0;
+                    if (abstractImages[i]) {
+                        const texL = new THREE.TextureLoader().load(abstractImages[i], function() {
+                            while (leftPage.children.length) leftPage.remove(leftPage.children[0]);
+                            const leftContent = new THREE.Mesh(
+                                new THREE.PlaneGeometry(1.48, 1.98),
+                                new THREE.MeshBasicMaterial({ map: texL, side: THREE.FrontSide })
+                            );
+                            leftContent.position.z = 0.011;
+                            leftPage.add(leftContent);
+                        });
+                    }
+                    leftPage.visible = false;
+                    leftPages.push(leftPage);
+                    selectedMagazine.add(leftPage);
+
+                    const rightPageGeometry = new THREE.BoxGeometry(1.5, 2, 0.01);
+                    const rightPageMaterial = new THREE.MeshStandardMaterial({
+                        color: 0xffffff,
+                        roughness: 0.8,
+                        side: THREE.DoubleSide
+                    });
+                    const rightPage = new THREE.Mesh(rightPageGeometry, rightPageMaterial);
+                    rightPage.position.x = 0.76;
+                    rightPage.rotation.y = Math.PI;
+                    if (abstractImages[i+1]) {
+                        const texR = new THREE.TextureLoader().load(abstractImages[i+1], function() {
+                            while (rightPage.children.length) rightPage.remove(rightPage.children[0]);
+                            const rightContent = new THREE.Mesh(
+                                new THREE.PlaneGeometry(1.48, 1.98),
+                                new THREE.MeshBasicMaterial({ map: texR, side: THREE.FrontSide })
+                            );
+                            rightContent.position.z = 0.011;
+                            rightPage.add(rightContent);
+                        });
+                    }
+                    rightPage.visible = false;
+                    rightPages.push(rightPage);
+                    selectedMagazine.add(rightPage);
+                }
+                selectedMagazine.userData.pagesCreated = true;
+                selectedMagazine.userData.isClosed = true;
+            } else if (isSculpture) {
+                // Sculpture: Each spread shows two images (left/right)
+                for (let i = 0; i < sculptureImages.length; i += 2) {
+                    const leftPageGeometry = new THREE.BoxGeometry(1.5, 2, 0.01);
+                    const leftPageMaterial = new THREE.MeshStandardMaterial({
+                        color: 0xffffff,
+                        roughness: 0.8,
+                        side: THREE.DoubleSide
+                    });
+                    const leftPage = new THREE.Mesh(leftPageGeometry, leftPageMaterial);
+                    leftPage.position.x = -0.76;
+                    leftPage.rotation.y = 0;
+                    if (sculptureImages[i]) {
+                        const texL = new THREE.TextureLoader().load(sculptureImages[i], function() {
+                            while (leftPage.children.length) leftPage.remove(leftPage.children[0]);
+                            const leftContent = new THREE.Mesh(
+                                new THREE.PlaneGeometry(1.48, 1.98),
+                                new THREE.MeshBasicMaterial({ map: texL, side: THREE.FrontSide })
+                            );
+                            leftContent.position.z = 0.011;
+                            leftPage.add(leftContent);
+                        });
+                    }
+                    leftPage.visible = false;
+                    leftPages.push(leftPage);
+                    selectedMagazine.add(leftPage);
+
+                    const rightPageGeometry = new THREE.BoxGeometry(1.5, 2, 0.01);
+                    const rightPageMaterial = new THREE.MeshStandardMaterial({
+                        color: 0xffffff,
+                        roughness: 0.8,
+                        side: THREE.DoubleSide
+                    });
+                    const rightPage = new THREE.Mesh(rightPageGeometry, rightPageMaterial);
+                    rightPage.position.x = 0.76;
+                    rightPage.rotation.y = Math.PI;
+                    if (sculptureImages[i+1]) {
+                        const texR = new THREE.TextureLoader().load(sculptureImages[i+1], function() {
+                            while (rightPage.children.length) rightPage.remove(rightPage.children[0]);
+                            const rightContent = new THREE.Mesh(
+                                new THREE.PlaneGeometry(1.48, 1.98),
+                                new THREE.MeshBasicMaterial({ map: texR, side: THREE.FrontSide })
+                            );
+                            rightContent.position.z = 0.011;
+                            rightPage.add(rightContent);
+                        });
+                    }
+                    rightPage.visible = false;
+                    rightPages.push(rightPage);
+                    selectedMagazine.add(rightPage);
+                }
+                selectedMagazine.userData.pagesCreated = true;
+                selectedMagazine.userData.isClosed = true;
+            } else if (isNanokitsch) {
+                // Nanokitsch: Each spread shows two images (left/right)
+                // Dynamically build the list of images based on the renamed files
+                const nanokitschImages = [
+                    '1.jpg','2.jpg','3.jpg','4.jpg','5.jpg','6.jpeg','7.jpg','8.jpg','9.jpg','10.jpg','11.jpg','12.jpg','13.jpeg','14.jpg','15.jpg','16.jpeg','17.PNG','18.PNG','19.png','20.png','21.jpeg','22.jpg','23.jpeg','24.jpeg','25.png','26.png','27.png','28.png'
+                ].map(f => 'art/Nanokitsch/' + f);
+                for (let i = 0; i < nanokitschImages.length; i += 2) {
+                    const leftPageGeometry = new THREE.BoxGeometry(1.5, 2, 0.01);
+                    const leftPageMaterial = new THREE.MeshStandardMaterial({
+                        color: 0xffffff,
+                        roughness: 0.8,
+                        side: THREE.DoubleSide
+                    });
+                    const leftPage = new THREE.Mesh(leftPageGeometry, leftPageMaterial);
+                    leftPage.position.x = -0.76;
+                    leftPage.rotation.y = 0;
+                    if (nanokitschImages[i]) {
+                        const texL = new THREE.TextureLoader().load(nanokitschImages[i], function() {
+                            while (leftPage.children.length) leftPage.remove(leftPage.children[0]);
+                            const leftContent = new THREE.Mesh(
+                                new THREE.PlaneGeometry(1.48, 1.98),
+                                new THREE.MeshBasicMaterial({ map: texL, side: THREE.FrontSide })
+                            );
+                            leftContent.position.z = 0.011;
+                            leftPage.add(leftContent);
+                        });
+                    }
+                    leftPage.visible = false;
+                    leftPages.push(leftPage);
+                    selectedMagazine.add(leftPage);
+
+                    const rightPageGeometry = new THREE.BoxGeometry(1.5, 2, 0.01);
+                    const rightPageMaterial = new THREE.MeshStandardMaterial({
+                        color: 0xffffff,
+                        roughness: 0.8,
+                        side: THREE.DoubleSide
+                    });
+                    const rightPage = new THREE.Mesh(rightPageGeometry, rightPageMaterial);
+                    rightPage.position.x = 0.76;
+                    rightPage.rotation.y = Math.PI;
+                    if (nanokitschImages[i+1]) {
+                        const texR = new THREE.TextureLoader().load(nanokitschImages[i+1], function() {
+                            while (rightPage.children.length) rightPage.remove(rightPage.children[0]);
+                            const rightContent = new THREE.Mesh(
+                                new THREE.PlaneGeometry(1.48, 1.98),
+                                new THREE.MeshBasicMaterial({ map: texR, side: THREE.FrontSide })
+                            );
+                            rightContent.position.z = 0.011;
+                            rightPage.add(rightContent);
+                        });
+                    }
+                    rightPage.visible = false;
+                    rightPages.push(rightPage);
+                    selectedMagazine.add(rightPage);
+                }
+                selectedMagazine.userData.pagesCreated = true;
+                selectedMagazine.userData.isClosed = true;
+            } else if (isDrawings) {
+                // Drawings: Each spread shows two images (left/right)
+                // List of all images in the drawings folder (sorted for consistency)
+                const drawingsImages = [
+                    '1.jpg','2.jpg','3.jpg','4.jpg','5.jpg','6.jpg','7.jpg','8.jpg','9.jpg','10.jpg','11.jpg','12.jpg','13.HEIC','111.jpg','213.jpg','506306118_3264109220405041_1349105185115133119_n.jpg','506357467_3264263153722981_1184039725831948903_n.jpg','506404307_3264268103722486_3743665707736515236_n.jpg','506410443_3264259337056696_4619905039669406059_n.jpg','506444594_3264254430390520_4091127472669716640_n.jpg','506448189_3263964377086192_3074119282907731027_n.jpg','506462626_3263959377086692_5453768760894503613_n.jpg','506508179_3264107000405263_3115786493092463722_n.jpg','506593329_3264777673671529_8704611452656927642_n.jpg','506628498_3264825297000100_5931734765830046653_n.jpg','506651376_3264836366998993_5167687839459567230_n.jpg','506992019_3264931630322800_2462959094080460467_n.jpg','507134814_3264930593656237_3196659004069190500_n.jpg','507660434_3263960553753241_7321557047825316784_n.jpg','507686513_3264272173722079_2561742819837774869_n.jpg','507941565_3264139320402031_1317391882816317087_n.jpg','508001957_3264126567069973_3675683109399567828_n.jpg','508065102_3264278363721460_6070051712759030691_n.jpg','508065343_3265117496970880_8808193606802941964_n.jpg','508074019_3263952993753997_9123892329877179626_n.jpg','508107059_3265000396982590_8620837004956269216_n.jpg','508109509_3264526387029991_6325745179200717095_n.jpg','508124302_3264424420373521_320798026018268281_n.jpg','508124823_3264415567041073_5624568309782605365_n.jpg','508129511_3264828310333132_17955417838105264_n.jpg','508158722_3264418300374133_4102514162776402887_n.jpg','508162087_3264438190372144_7227240695235110110_n.jpg','508166682_3264414720374491_8572488924656859486_n.jpg','508172086_3264439823705314_2361788707029973713_n.jpg','508175343_3265079450308018_9050161006438310653_n.jpg','508177310_3265086800307283_8544511479831670776_n.jpg','508181443_3265064506976179_3701000088736652757_n.jpg','508186425_3264426833706613_8331017800955905715_n.jpg','508204271_3265060936976536_8716527630835736383_n.jpg','508227651_3265005180315445_7802920674500230019_n.jpg','508247352_3265052593644037_6753920428456423041_n.jpg','508340195_3265088513640445_1385344190553630974_n.jpg','508343898_3265082050307758_4307386639836963870_n.jpg','508344804_3264511833698113_1542890948152486655_n.jpg','508418151_3265005436982086_6317136017102569576_n.jpg','508611246_3265009586981671_5066578144277824588_n.jpg','a.jpg','arty.jpg','asdsa.jpg','asss.jpg','AVLW7821.jpg','BAMN6047.HEIC','BGLR1004.jpg','CCYO7715.jpg','CIDC4369.jpg','CNZC0986.jpg','cx.jpg','dancingcrown.jpg','DERF3916.jpg','DICME5834.HEIC','draw3.jpeg','DSPD2658.jpg','DUPW1198.jpg','FullSizeRender (2).jpeg','FullSizeRender (3).jpeg','FullSizeRender (4).jpeg','FullSizeRender (5).jpeg','FullSizeRender (6).jpeg','GCTQE7208.HEIC','HSYI6123.jpg','IMG_0065.JPG','IMG_0077.JPG','IMG_0079.JPG','IMG_1054.jpg','IMG_1059.jpg','IMG_1062.HEIC','IMG_1063.jpg','IMG_1064.jpg','IMG_1065.jpg','IMG_1066.jpg','IMG_1067.jpg','IMG_1068.jpg','IMG_1070.jpg','IMG_1071.jpg','IMG_1072.jpg','IMG_1073.jpg','IMG_1074.jpg','IMG_1075.jpg','IMG_1076.jpg','IMG_1077.jpg','IMG_1078.jpg','IMG_1079.jpg','IMG_1096.jpg','IMG_1123.jpg','IMG_1129.jpg','IMG_1131.jpg','IMG_1132.jpg','IMG_1133.jpg','IMG_1136.jpg','IMG_1145.jpg','IMG_1148.jpg','IMG_1150.jpg','IMG_1151.jpg','IMG_4402.JPG','IMG_4679.HEIC','IMG_4701.JPG','IMG_4778.JPG','IMG_5395.JPG','IMG_5450.JPG','IMG_5466.JPG','IMG_5474.JPG','IMG_5475.JPG','IMG_5476.JPG','IMG_5573.JPG','IMG_5576.JPG','IMG_5578.JPG','IMG_5582.JPG','IMG_5584.JPG','IMG_5585.JPG','IMG_5587.JPG','IMG_5592.JPG','IMG_5594.JPG','IMG_5597.JPG','IMG_5749.jpeg','IMG_E1134.HEIC','IMG_E1135.HEIC','IMG_E1143.HEIC','IMG_E1162.HEIC','IMG_E4710.HEIC','IMG_E4711.HEIC','IMG_E4714.HEIC','IMG_E4716.HEIC','IMG_E4722.HEIC','IMG_E5662.JPG','LFJS6229.jpg','LKPPE1147.HEIC','MBZR0984.jpg','MOUQE9831.HEIC','OQVI5661.jpg','QKYL7585.jpg','QUFME1759.HEIC','RHHL8463.jpg','RKIYE7689.HEIC','s.jpg','se.jpg','SWMA2289.jpg','URHZ8032.jpg','UUNO0571.jpg','VUPZE4536.HEIC','WNHX4806.JPG'
+                ].map(f => 'art/drawings/' + f);
+                for (let i = 0; i < drawingsImages.length; i += 2) {
+                    const leftPageGeometry = new THREE.BoxGeometry(1.5, 2, 0.01);
+                    const leftPageMaterial = new THREE.MeshStandardMaterial({
+                        color: 0xffffff,
+                        roughness: 0.8,
+                        side: THREE.DoubleSide
+                    });
+                    const leftPage = new THREE.Mesh(leftPageGeometry, leftPageMaterial);
+                    leftPage.position.x = -0.76;
+                    leftPage.rotation.y = 0;
+                    if (drawingsImages[i]) {
+                        const texL = new THREE.TextureLoader().load(drawingsImages[i], function() {
+                            while (leftPage.children.length) leftPage.remove(leftPage.children[0]);
+                            const leftContent = new THREE.Mesh(
+                                new THREE.PlaneGeometry(1.48, 1.98),
+                                new THREE.MeshBasicMaterial({ map: texL, side: THREE.FrontSide })
+                            );
+                            leftContent.position.z = 0.011;
+                            leftPage.add(leftContent);
+                        });
+                    }
+                    leftPage.visible = false;
+                    leftPages.push(leftPage);
+                    selectedMagazine.add(leftPage);
+
+                    const rightPageGeometry = new THREE.BoxGeometry(1.5, 2, 0.01);
+                    const rightPageMaterial = new THREE.MeshStandardMaterial({
+                        color: 0xffffff,
+                        roughness: 0.8,
+                        side: THREE.DoubleSide
+                    });
+                    const rightPage = new THREE.Mesh(rightPageGeometry, rightPageMaterial);
+                    rightPage.position.x = 0.76;
+                    rightPage.rotation.y = Math.PI;
+                    if (drawingsImages[i+1]) {
+                        const texR = new THREE.TextureLoader().load(drawingsImages[i+1], function() {
+                            while (rightPage.children.length) rightPage.remove(rightPage.children[0]);
+                            const rightContent = new THREE.Mesh(
+                                new THREE.PlaneGeometry(1.48, 1.98),
+                                new THREE.MeshBasicMaterial({ map: texR, side: THREE.FrontSide })
+                            );
+                            rightContent.position.z = 0.011;
+                            rightPage.add(rightContent);
+                        });
+                    }
+                    rightPage.visible = false;
+                    rightPages.push(rightPage);
+                    selectedMagazine.add(rightPage);
+                }
+                selectedMagazine.userData.pagesCreated = true;
+                selectedMagazine.userData.isClosed = true;
+            } else if (selectedMagazine.userData.index === 6) {
+                // Performance magazine: load images from art/ME folder as double-page spreads
+                const meImages = [
+                    '12.JPG',
+                    '506534593_3264209783728318_3859043020222053888_n.jpg',
+                    '509264237_3267872840028679_6447839484678108310_n.jpg',
+                    '51237851_1224646967684620_2464914020738531328_n.jpg',
+                    '6147835_orig.jpg',
+                    '93272875_1615777085238271_7160086970675232768_n.jpg',
+                    '9a9a67_6e050760b5d64883a226c3259d65dc37~mv2.avif',
+                    '9a9a67_c124f3b0373d4075b99ddfade717705c~mv2.avif',
+                    'art.jpeg',
+                    'arter.jpeg',
+                    'artist.png',
+                    'artshaman.jpg',
+                    'artshaman.png',
+                    'blacky.jpeg',
+                    'download.png',
+                    'fakiria.jpg',
+                    'mi.jpeg',
+                    'missssa.png',
+                    'mural.jpeg',
+                    'neon.jpeg',
+                    'portal.jpeg',
+                    'qwer.jpeg',
+                    'shodo.png',
+                    'stu1.jpeg',
+                    'studio_edited.jpg',
+                    'surfy.jpeg',
+                    'teslaaax.jpg',
+                    'unnamed.jpg'
+                ].map(f => 'art/ME/' + f);
+                for (let i = 0; i < meImages.length; i += 2) {
+                    const leftPageGeometry = new THREE.BoxGeometry(1.5, 2, 0.01);
+                    const leftPageMaterial = new THREE.MeshStandardMaterial({
+                        color: 0xffffff,
+                        roughness: 0.8,
+                        side: THREE.DoubleSide
+                    });
+                    const leftPage = new THREE.Mesh(leftPageGeometry, leftPageMaterial);
+                    leftPage.position.x = -0.76;
+                    leftPage.rotation.y = 0;
+                    if (meImages[i]) {
+                        const texL = new THREE.TextureLoader().load(meImages[i], function() {
+                            while (leftPage.children.length) leftPage.remove(leftPage.children[0]);
+                            const leftContent = new THREE.Mesh(
+                                new THREE.PlaneGeometry(1.48, 1.98),
+                                new THREE.MeshBasicMaterial({ map: texL, side: THREE.FrontSide })
+                            );
+                            leftContent.position.z = 0.011;
+                            leftPage.add(leftContent);
+                        });
+                    }
+                    leftPage.visible = false;
+                    leftPages.push(leftPage);
+                    selectedMagazine.add(leftPage);
+
+                    const rightPageGeometry = new THREE.BoxGeometry(1.5, 2, 0.01);
+                    const rightPageMaterial = new THREE.MeshStandardMaterial({
+                        color: 0xffffff,
+                        roughness: 0.8,
+                        side: THREE.DoubleSide
+                    });
+                    const rightPage = new THREE.Mesh(rightPageGeometry, rightPageMaterial);
+                    rightPage.position.x = 0.76;
+                    rightPage.rotation.y = Math.PI;
+                    if (meImages[i+1]) {
+                        const texR = new THREE.TextureLoader().load(meImages[i+1], function() {
+                            while (rightPage.children.length) rightPage.remove(rightPage.children[0]);
+                            const rightContent = new THREE.Mesh(
+                                new THREE.PlaneGeometry(1.48, 1.98),
+                                new THREE.MeshBasicMaterial({ map: texR, side: THREE.FrontSide })
+                            );
+                            rightContent.position.z = 0.011;
+                            rightPage.add(rightContent);
+                        });
+                    }
+                    rightPage.visible = false;
+                    rightPages.push(rightPage);
+                    selectedMagazine.add(rightPage);
+                }
+                selectedMagazine.userData.pagesCreated = true;
+                selectedMagazine.userData.isClosed = true;
+            } else {
+                // ...existing code for other magazines...
+                for (let i = 0; i < totalPages; i++) {
+                    // ...existing code for left/right pages...
+                    const leftPageGeometry = new THREE.BoxGeometry(1.5, 2, 0.01);
+                    const leftPageMaterial = new THREE.MeshStandardMaterial({
+                        color: 0xffffff,
+                        roughness: 0.8,
+                        side: THREE.DoubleSide
+                    });
+                    const leftPage = new THREE.Mesh(leftPageGeometry, leftPageMaterial);
+                    leftPage.position.set(0, 0, -0.006);
+                    const leftCanvas = document.createElement('canvas');
+                    leftCanvas.width = 512;
+                    leftCanvas.height = 683;
+                    const leftCtx = leftCanvas.getContext('2d');
+                    createPageLayout(leftCtx, i * 2, i);
+                    const leftTexture = new THREE.CanvasTexture(leftCanvas);
+                    const leftContent = new THREE.Mesh(
+                        new THREE.PlaneGeometry(1.48, 1.98),
+                        new THREE.MeshBasicMaterial({ map: leftTexture })
+                    );
+                    leftContent.position.z = 0.006;
+                    leftPage.add(leftContent);
+                    leftPage.visible = false;
+                    leftPages.push(leftPage);
+                    selectedMagazine.add(leftPage);
+
+                    const rightPageGeometry = new THREE.BoxGeometry(1.5, 2, 0.01);
+                    const rightPageMaterial = new THREE.MeshStandardMaterial({
+                        color: 0xffffff,
+                        roughness: 0.8,
+                        side: THREE.DoubleSide
+                    });
+                    const rightPage = new THREE.Mesh(rightPageGeometry, rightPageMaterial);
+                    rightPage.position.set(0, 0, 0.006);
+                    rightPage.rotation.y = 0;
+                    const rightCanvas = document.createElement('canvas');
+                    rightCanvas.width = 512;
+                    rightCanvas.height = 683;
+                    const rightCtx = rightCanvas.getContext('2d');
+                    createPageLayout(rightCtx, i * 2 + 1, i + 1);
+                    const rightTexture = new THREE.CanvasTexture(rightCanvas);
+                    const rightContent = new THREE.Mesh(
+                        new THREE.PlaneGeometry(1.48, 1.98),
+                        new THREE.MeshBasicMaterial({ map: rightTexture })
+                    );
+                    rightContent.position.z = -0.006;
+                    rightContent.rotation.y = Math.PI;
+                    rightPage.add(rightContent);
+                    rightPage.visible = false;
+                    rightPages.push(rightPage);
+                    selectedMagazine.add(rightPage);
+                }
+            }
+            selectedMagazine.userData.leftPages = leftPages;
+            selectedMagazine.userData.rightPages = rightPages;
+            selectedMagazine.userData.pagesCreated = true;
+            selectedMagazine.userData.isClosed = true; // Magazine starts closed
+        }
+
+        function createPageFlipMechanism() {
+            // Remove old page geometry if exists
+            if (selectedMagazine.userData.leftPages) {
+                selectedMagazine.userData.leftPages.forEach(page => selectedMagazine.remove(page));
+                selectedMagazine.userData.rightPages.forEach(page => selectedMagazine.remove(page));
+            }
+
+            const leftPages = [];
+            const rightPages = [];
+            const totalPages = selectedMagazine.userData.magazineData.pages;
+
+            // Create spread pages (2 pages shown at once)
+            for (let i = 0; i < totalPages; i++) {
+                // Left page
+                const leftPageGeometry = new THREE.BoxGeometry(1.5, 2, 0.01);
+                const leftPageMaterial = new THREE.MeshStandardMaterial({
+                    color: 0xffffff,
+                    roughness: 0.8,
+                    side: THREE.DoubleSide
+                });
+                const leftPage = new THREE.Mesh(leftPageGeometry, leftPageMaterial);
+                leftPage.position.x = -0.76; // Position to the left
+                
+                // Create left page content
+                const leftCanvas = document.createElement('canvas');
+                leftCanvas.width = 512;
+                leftCanvas.height = 683;
+                const leftCtx = leftCanvas.getContext('2d');
+                
+                leftCtx.fillStyle = '#ffffff';
+                leftCtx.fillRect(0, 0, 512, 683);
+                
+                leftCtx.fillStyle = '#333333';
+                leftCtx.font = 'bold 28px Arial';
+                leftCtx.textAlign = 'center';
+                leftCtx.fillText(`Page ${i * 2}`, 256, 50);
+                
+                // Add some content lines
+                leftCtx.font = '16px Arial';
+                leftCtx.textAlign = 'left';
+                for (let line = 0; line < 22; line++) {
+                    const y = 100 + line * 24;
+                    const text = 'Art and sculpture have defined...';
+                    leftCtx.fillText(text, 30, y);
+                }
+                
+                // Add page number at bottom
+                leftCtx.font = '14px Arial';
+                leftCtx.textAlign = 'center';
+                leftCtx.fillText(`${i * 2}`, 256, 660);
+
+                const leftTexture = new THREE.CanvasTexture(leftCanvas);
+                const leftContentMaterial = new THREE.MeshBasicMaterial({ map: leftTexture });
+                const leftContent = new THREE.Mesh(
+                    new THREE.PlaneGeometry(1.48, 1.98),
+                    leftContentMaterial
+                );
+                leftContent.position.z = 0.006;
+                leftPage.add(leftContent);
+
+                leftPage.visible = (i === 0);
+                leftPage.userData.pageNumber = i * 2;
+                leftPages.push(leftPage);
+                selectedMagazine.add(leftPage);
+
+                // Right page
+                const rightPageGeometry = new THREE.BoxGeometry(1.5, 2, 0.01);
+                const rightPageMaterial = new THREE.MeshStandardMaterial({
+                    color: 0xffffff,
+                    roughness: 0.8,
+                    side: THREE.DoubleSide
+                });
+                const rightPage = new THREE.Mesh(rightPageGeometry, rightPageMaterial);
+                rightPage.position.x = 0.76; // Position to the right
+                
+                // Create right page content
+                const rightCanvas = document.createElement('canvas');
+                rightCanvas.width = 512;
+                rightCanvas.height = 683;
+                const rightCtx = rightCanvas.getContext('2d');
+                
+                rightCtx.fillStyle = '#ffffff';
+                rightCtx.fillRect(0, 0, 512, 683);
+                
+                rightCtx.fillStyle = '#333333';
+                rightCtx.font = 'bold 28px Arial';
+                rightCtx.textAlign = 'center';
+                rightCtx.fillText(`Page ${i * 2 + 1}`, 256, 50);
+                
+                // Add some content lines
+                rightCtx.font = '16px Arial';
+                rightCtx.textAlign = 'left';
+                for (let line = 0; line < 22; line++) {
+                    const y = 100 + line * 24;
+                    const text = 'Kitsch embraces bold colors and...';
+                    rightCtx.fillText(text, 30, y);
+                }
+                
+                // Add page number at bottom
+                rightCtx.font = '14px Arial';
+                rightCtx.textAlign = 'center';
+                rightCtx.fillText(`${i * 2 + 1}`, 256, 660);
+
+                const rightTexture = new THREE.CanvasTexture(rightCanvas);
+                const rightContentMaterial = new THREE.MeshBasicMaterial({ map: rightTexture });
+                const rightContent = new THREE.Mesh(
+                    new THREE.PlaneGeometry(1.48, 1.98),
+                    rightContentMaterial
+                );
+                rightContent.position.z = 0.006;
+                rightPage.add(rightContent);
+
+                rightPage.visible = (i === 0);
+                rightPage.userData.pageNumber = i * 2 + 1;
+                rightPages.push(rightPage);
+                selectedMagazine.add(rightPage);
+            }
+
+            selectedMagazine.userData.leftPages = leftPages;
+            selectedMagazine.userData.rightPages = rightPages;
+        }
+
+        function onMouseDown(event) {
+            if (!isReadingMode) return;
+            
+            // Only allow right mouse button (button 2) for dragging
+            if (event.button === 2) {
+                console.log('Right mouse button detected');
+                isDragging = true;
+                dragStartX = event.clientX;
+                event.preventDefault(); // Prevent context menu
+                
+                // Don't reset rotation if magazine is closed
+                if (selectedMagazine.userData.rightPages && !selectedMagazine.userData.isClosed) {
+                    const rightPage = selectedMagazine.userData.rightPages[currentPage];
+                    rightPage.rotation.y = Math.PI;
+                }
+            }
+        }
+
+        function onMouseMove(event) {
+            if (!isReadingMode || !isDragging) return;
+            
+            // Smooth page follow drag
+            const dragDistance = event.clientX - dragStartX;
+            const maxDrag = 200;
+            const normalizedDrag = Math.max(-1, Math.min(1, dragDistance / maxDrag));
+            
+            if (selectedMagazine.userData.rightPages && selectedMagazine.userData.leftPages) {
+                // Open magazine on drag (very responsive - just 10px movement)
+                if (selectedMagazine.userData.isClosed && Math.abs(dragDistance) > 10) {
+                    console.log('Opening magazine from drag');
+                    openMagazineSpread();
+                    document.getElementById('openButton').style.display = 'none';
+                }
+                
+                const rightPage = selectedMagazine.userData.rightPages[currentPage];
+                const leftPage = selectedMagazine.userData.leftPages[currentPage];
+                
+                if (!selectedMagazine.userData.isClosed) {
+                    // Rotate right page based on drag (for page turning)
+                    if (normalizedDrag < 0) {
+                        const rotationAmount = normalizedDrag * Math.PI * 0.5;
+                        rightPage.rotation.y = Math.PI + rotationAmount;
+                        rightPage.position.z = Math.abs(normalizedDrag) * 0.15;
+                    }
+                }
+            }
+        }
+        
+        function openMagazineSpread() {
+            if (!selectedMagazine.userData.isClosed) return;
+            
+            selectedMagazine.userData.isClosed = false;
+            const leftPage = selectedMagazine.userData.leftPages[currentPage];
+            const rightPage = selectedMagazine.userData.rightPages[currentPage];
+            
+            // Show inside pages immediately
+            leftPage.visible = true;
+            rightPage.visible = true;
+            
+            // Animate the front cover flipping from right to left
+            const cover = selectedMagazine.userData.cover;
+            const titlePlane = selectedMagazine.userData.titlePlane;
+            
+            const duration = 1000;
+            const startTime = Date.now();
+            
+            function animate() {
+                const elapsed = Date.now() - startTime;
+                const t = Math.min(elapsed / duration, 1);
+                const eased = 1 - Math.pow(1 - t, 3); // ease-out cubic
+                
+                if (t < 0.5) {
+                    // First half: Flip the front cover from right to left
+                    const flipT = t * 2; // 0 to 1 in first half
+                    
+                    // Cover flips around its left edge (like opening a book)
+                    if (cover) {
+                        cover.position.x = -0.76 * flipT; // Move to left
+                        cover.rotation.y = -Math.PI * flipT; // Rotate 180 degrees to the left
+                    }
+                    if (titlePlane) {
+                        titlePlane.position.x = -0.76 * flipT;
+                        titlePlane.rotation.y = -Math.PI * flipT;
+                    }
+                    
+                    // Pages stay hidden during cover flip
+                    leftPage.visible = false;
+                    rightPage.visible = false;
+                    
+                } else {
+                    // Second half: Hide cover and show pages spreading open
+                    if (cover) cover.visible = false;
+                    if (titlePlane) titlePlane.visible = false;
+                    
+                    const spreadT = (t - 0.5) * 2; // 0 to 1 in second half
+                    
+                    // Left page slides to position
+                    leftPage.visible = true;
+                    leftPage.position.x = -0.76;
+                    leftPage.rotation.y = 0;
+                    
+                    // Right page slides to position
+                    rightPage.visible = true;
+                    rightPage.position.x = 0.76;
+                    rightPage.rotation.y = Math.PI;
+                }
+                
+                if (t < 1) {
+                    requestAnimationFrame(animate);
+                } else {
+                    // Final state
+                    if (cover) cover.visible = false;
+                    if (titlePlane) titlePlane.visible = false;
+                    leftPage.position.x = -0.76;
+                    leftPage.rotation.y = 0;
+                    rightPage.position.x = 0.76;
+                    rightPage.rotation.y = Math.PI;
+                    
+                    // Show page flip buttons after opening
+                    document.getElementById('prevButton').style.display = 'block';
+                    document.getElementById('nextButton').style.display = 'block';
+                }
+            }
+            
+            animate();
+        }
+
+        function openMagazineWithButton() {
+            if (!isReadingMode || !selectedMagazine) return;
+            if (!selectedMagazine.userData.isClosed) return;
+            
+            openMagazineSpread();
+            
+            // Hide the open button after opening
+            document.getElementById('openButton').style.display = 'none';
+        }
+
+        function onMouseUp(event) {
+            if (!isReadingMode || !isDragging) return;
+            
+            const dragDistance = event.clientX - dragStartX;
+            const threshold = 80;
+
+            if (Math.abs(dragDistance) > threshold) {
+                if (dragDistance < 0) {
+                    // Drag left - next page
+                    nextPage();
+                } else {
+                    // Drag right - previous page
+                    previousPage();
+                }
+            } else {
+                // Snap back if drag was too small
+                if (selectedMagazine.userData.rightPages) {
+                    const rightPage = selectedMagazine.userData.rightPages[currentPage];
+                    snapPageBack(rightPage);
+                }
+            }
+
+            isDragging = false;
+        }
+        
+        function snapPageBack(page) {
+            const startRotation = page.rotation.y;
+            const startPosZ = page.position.z;
+            const duration = 200;
+            const startTime = Date.now();
+
+            function animate() {
+                const elapsed = Date.now() - startTime;
+                const t = Math.min(elapsed / duration, 1);
+                const eased = 1 - Math.pow(1 - t, 3);
+
+                page.rotation.y = startRotation * (1 - eased);
+                page.position.z = startPosZ * (1 - eased);
+
+                if (t < 1) {
+                    requestAnimationFrame(animate);
+                }
+            }
+
+            animate();
+        }
+
+        function nextPage() {
+            const totalPages = selectedMagazine.userData.leftPages.length;
+            if (currentPage < totalPages - 1) {
+                selectedMagazine.userData.leftPages[currentPage].visible = false;
+                selectedMagazine.userData.rightPages[currentPage].visible = false;
+                currentPage++;
+                selectedMagazine.userData.leftPages[currentPage].visible = true;
+                selectedMagazine.userData.rightPages[currentPage].visible = true;
+                updatePageCounter();
+                animatePageFlip();
+            }
+        }
+
+        function previousPage() {
+            if (currentPage > 0) {
+                selectedMagazine.userData.leftPages[currentPage].visible = false;
+                selectedMagazine.userData.rightPages[currentPage].visible = false;
+                currentPage--;
+                selectedMagazine.userData.leftPages[currentPage].visible = true;
+                selectedMagazine.userData.rightPages[currentPage].visible = true;
+                updatePageCounter();
+                animatePageFlip();
+            }
+        }
+
+        function animatePageFlip() {
+            const rightPage = selectedMagazine.userData.rightPages[currentPage];
+            const startRotation = rightPage.rotation.y || 0;
+            const startPosZ = rightPage.position.z || 0;
+            const duration = 400;
+            const startTime = Date.now();
+
+            function animate() {
+                const elapsed = Date.now() - startTime;
+                const t = Math.min(elapsed / duration, 1);
+                const eased = 1 - Math.pow(1 - t, 3);
+
+                // Smooth rotation to flat
+                rightPage.rotation.y = startRotation * (1 - eased);
+                rightPage.position.z = startPosZ * (1 - eased);
+
+                if (t < 1) {
+                    requestAnimationFrame(animate);
+                }
+            }
+
+            animate();
+        }
+
+        function updatePageCounter() {
+            const total = selectedMagazine.userData.magazineData.pages;
+            const leftPageNum = currentPage * 2;
+            const rightPageNum = currentPage * 2 + 1;
+            document.getElementById('pageCounter').textContent = 
+                `Pages ${leftPageNum}-${rightPageNum} (Spread ${currentPage + 1} of ${total})`;
+        }
+
+        function exitReadingMode() {
+            if (!selectedMagazine) return;
+
+            // Hide UI
+            document.getElementById('backButton').style.display = 'none';
+            document.getElementById('openButton').style.display = 'none';
+            document.getElementById('pageCounter').style.display = 'none';
+            document.getElementById('prevButton').style.display = 'none';
+            document.getElementById('nextButton').style.display = 'none';
+
+            // Always reset magazine to closed state visually
+            // Show the front cover and title again
+            if (selectedMagazine.userData.cover) {
+                selectedMagazine.userData.cover.visible = true;
+                selectedMagazine.userData.cover.position.x = 0;
+                selectedMagazine.userData.cover.rotation.y = 0;
+            }
+            if (selectedMagazine.userData.titlePlane) {
+                selectedMagazine.userData.titlePlane.visible = true;
+                selectedMagazine.userData.titlePlane.position.x = 0;
+                selectedMagazine.userData.titlePlane.rotation.y = 0;
+            }
+
+            // Remove all pages and reset state
+            if (selectedMagazine.userData.leftPages) {
+                selectedMagazine.userData.leftPages.forEach(page => {
+                    selectedMagazine.remove(page);
+                });
+                selectedMagazine.userData.leftPages = null;
+            }
+            if (selectedMagazine.userData.rightPages) {
+                selectedMagazine.userData.rightPages.forEach(page => {
+                    selectedMagazine.remove(page);
+                });
+                selectedMagazine.userData.rightPages = null;
+            }
+
+            selectedMagazine.userData.isClosed = true;
+
+            // Animate back
+            const targetPos = selectedMagazine.userData.originalPosition;
+            const targetRot = selectedMagazine.userData.originalRotation;
+            animateMagazineBack(selectedMagazine, targetPos, targetRot);
+
+            // Re-enable controls
+            controls.enabled = true;
+            isReadingMode = false;
+            selectedMagazine = null;
+        }
+
+        function animateMagazineBack(magazine, targetPos, targetRot) {
+            const startPos = magazine.position.clone();
+            const startRot = magazine.rotation.clone();
+            const duration = 800;
+            const startTime = Date.now();
+
+            function animate() {
+                const elapsed = Date.now() - startTime;
+                const t = Math.min(elapsed / duration, 1);
+                const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+
+                magazine.position.lerpVectors(startPos, targetPos, eased);
+                magazine.rotation.x = startRot.x + (targetRot.x - startRot.x) * eased;
+                magazine.rotation.y = startRot.y + (targetRot.y - startRot.y) * eased;
+                magazine.rotation.z = startRot.z + (targetRot.z - startRot.z) * eased;
+
+                if (t < 1) {
+                    requestAnimationFrame(animate);
+                }
+            }
+
+            animate();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Subtle floating animation for magazines when not reading
+            if (!isReadingMode) {
+                const time = Date.now() * 0.001;
+                magazines.forEach((mag, i) => {
+                    mag.position.y = mag.userData.originalPosition.y + 
+                        Math.sin(time + i * 0.5) * 0.02;
+                });
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // Initialize
+        init();
+    </script>
+</body>
+</html>
